@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.cardpilot.url</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cardpilot</string>
+			</array>
+		</dict>
+	</array>
+	
+	<!-- 位置权限 -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>需要始终访问位置以提供后台服务和WiFi网络信息</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>需要在使用时访问位置和WiFi网络信息</string>
+	
+	<!-- 运动传感器权限 -->
+	<key>NSMotionUsageDescription</key>
+	<string>需要访问运动传感器来记录IMU数据</string>
+	
+	<!-- NFC权限 -->
+	<key>NFCReaderUsageDescription</key>
+	<string>需要读取NFC标签内容以获取上下文信息</string>
+	
+	<!-- 麦克风权限 -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>需要访问麦克风来录制音频数据</string>
+	
+	<!-- 蓝牙权限 -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>需要访问蓝牙来连接外部设备</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>需要访问蓝牙外设来获取数据</string>
+	
+	<!-- 天气数据权限 -->
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>WeatherData</key>
+		<string>需要临时访问位置来获取当前天气信息</string>
+	</dict>
+	
+	<!-- 网络权限 -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	
+	<!-- 网络接口访问权限 -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>需要访问本地网络信息来获取WiFi网络名称</string>
+	
+	<!-- WiFi信息访问权限 (iOS 14+) -->
+	<key>com.apple.developer.networking.wifi-info</key>
+	<true/>
+</dict>
+</plist>
