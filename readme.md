@@ -60,8 +60,15 @@ To set up CardPilot with iOS Shortcuts for NFC triggering:
 CardPilot supports custom URL schemes for external triggering:
 
 ```
-cardpilot://trigger?sourceApp=YourAppName
+cardpilot://collect?sourceApp=YourAppName&autoExit=true&silent=true
 ```
+
+**完整URL参数说明：**
+- `sourceApp`: 触发应用的名称（如：Shortcuts, NFC等）
+- `autoExit`: 是否自动退出（true/false）
+- `silent`: 是否静默模式（true/false）
+- `ssid`: WiFi SSID（可选，从Shortcuts传入）
+- `nfc`: NFC UID（可选，从Shortcuts或NFC传入）
 
 ### 3. Manual Testing
 
@@ -124,7 +131,7 @@ Each NFC session records:
 
 ### URL Scheme Trigger
 ```swift
-if let url = URL(string: "cardpilot://trigger?sourceApp=MyApp") {
+if let url = URL(string: "cardpilot://collect?sourceApp=MyApp&autoExit=true&silent=true") {
     UIApplication.shared.open(url)
 }
 ```
