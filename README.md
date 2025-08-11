@@ -54,9 +54,10 @@ To set up CardPilot with iOS Shortcuts for NFC triggering using URL Scheme:
 4. Add "Get Current WiFi Network" action to capture WiFi details
 5. Add "Get Details of WiFi Network" action and select "SSID"
 6. Add "Open URLs" action (not "Open App")
-7. Set the URL to: `cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=[WiFi Variable]`
+7. Set the URL to: `cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=[WiFi Variable]&nfc=[Shortcut Input]`
 8. Replace `[WiFi Variable]` with the SSID variable from step 5
-9. Save the shortcut
+9. Replace `[Shortcut Input]` with the "Shortcut Input" variable (this automatically contains the NFC tag data when triggered)
+10. Save the shortcut
 
 **Alternative: Simple NFC-only setup**
 If you only need NFC triggering without WiFi details:
@@ -112,9 +113,12 @@ cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=MyWiFi&nf
 - If not provided, the app will attempt to get network connection status
 
 **nfc Parameter**
-- Passes NFC tag UID or custom identifier
+- Passes NFC tag UID or custom identifier from the Shortcuts input variable
+- Automatically populated when using NFC trigger in iOS Shortcuts
+- The value comes from `[Shortcut Input]` variable which contains the NFC tag data
 - Used to associate specific NFC tags with usage scenarios
 - Facilitates subsequent data analysis and tag management
+- When using NFC trigger in Shortcuts, this parameter is automatically filled with the scanned NFC tag information
 
 #### Minimal URL Example
 
@@ -196,17 +200,29 @@ Each NFC session records:
 #### Using in iOS Shortcuts
 In the Shortcuts app, add an "Open URL" action:
 
-**With WiFi details (recommended):**
+**With WiFi details and NFC input (recommended):**
 ```
-cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=[WiFi_SSID]&nfc=[NFC_UID]
-```
-
-**Without WiFi details:**
-```
-cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&nfc=[NFC_UID]
+cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=[WiFi_SSID]&nfc=[Shortcut Input]
 ```
 
-**Note:** Replace `[WiFi_SSID]` with the actual WiFi network name variable from your Shortcuts workflow.
+**With NFC input only:**
+```
+cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&nfc=[Shortcut Input]
+```
+
+**Important Notes:**
+- The `[Shortcut Input]` variable is automatically available when using an NFC trigger in Shortcuts
+- This variable contains the NFC tag data (UID, content, etc.) that was scanned
+- Replace `[WiFi_SSID]` with the actual WiFi network name variable from your Shortcuts workflow
+- The NFC parameter helps identify which specific tag triggered the data collection
+
+#### Understanding NFC Input Variables in Shortcuts
+
+When you add an **NFC trigger** to your shortcut:
+1. iOS Shortcuts automatically creates a `Shortcut Input` variable
+2. This variable contains information about the scanned NFC tag
+3. You can directly use this variable in the URL by adding `&nfc=[Shortcut Input]`
+4. CardPilot will receive and store this NFC tag information for analysis
 
 #### Programmatic Calls in Other Apps
 ```swift
