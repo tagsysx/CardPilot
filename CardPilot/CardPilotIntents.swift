@@ -9,7 +9,7 @@ import UIKit
 
 struct CollectDataIntent: AppIntent {
     static var title: LocalizedStringResource = "Collect Sensor Data"
-    static var description = IntentDescription("Collects sensor data in background (excluding microphone) with WiFi and NFC info")
+    static var description = IntentDescription("Collects sensor data in background (excluding microphone) with WiFi, NFC, and GPS coordinates")
     static var openAppWhenRun = false  // Don't open the app UI
     
     @Parameter(title: "WiFi Info", description: "WiFi SSID or network information", default: "")
@@ -18,10 +18,17 @@ struct CollectDataIntent: AppIntent {
     @Parameter(title: "NFC Info", description: "NFC tag UID or information", default: "")
     var nfc: String
     
+    @Parameter(title: "Latitude", description: "GPS latitude coordinate", default: 0.0)
+    var latitude: Double
+    
+    @Parameter(title: "Longitude", description: "GPS longitude coordinate", default: 0.0)
+    var longitude: Double
+    
     func perform() async throws -> some IntentResult & ProvidesDialog {
         print("🎯 Starting background data collection via App Intent")
         print("🌐 WiFi from Shortcuts: \(wifi)")
         print("🏷️ NFC from Shortcuts: \(nfc)")
+        print("📍 GPS from Shortcuts: \(latitude), \(longitude)")
         
         do {
             // Create a temporary model context for data storage
@@ -39,7 +46,7 @@ struct CollectDataIntent: AppIntent {
             
             print("✅ Background data collection completed successfully")
             
-            return .result(dialog: IntentDialog("Data collected: WiFi: \(wifi), NFC: \(nfc), Location: \(sessionData.latitude ?? 0), \(sessionData.longitude ?? 0)"))
+            return .result(dialog: IntentDialog("Data collected: WiFi: \(wifi), NFC: \(nfc), Location: \(latitude), \(longitude)"))
             
         } catch {
             print("❌ Background data collection failed: \(error)")
@@ -53,13 +60,12 @@ struct CollectDataIntent: AppIntent {
         let sessionData = NFCSessionData()
         sessionData.timestamp = Date()
         
-        print("📍 Collecting GPS coordinates...")
-        let locationData = try await collectLocationDataInBackground()
-        sessionData.latitude = locationData.latitude
-        sessionData.longitude = locationData.longitude
+        print("📍 Using GPS coordinates from Shortcuts parameters...")
+        sessionData.latitude = latitude
+        sessionData.longitude = longitude
         
         // Parse address information from GPS coordinates
-        if let latitude = locationData.latitude, let longitude = locationData.longitude {
+        if latitude != 0.0 && longitude != 0.0 {
             print("🏠 Parsing address from GPS coordinates...")
             let addressInfo = try await parseAddressFromCoordinates(latitude: latitude, longitude: longitude)
             sessionData.street = addressInfo.street
@@ -70,7 +76,7 @@ struct CollectDataIntent: AppIntent {
             sessionData.administrativeArea = addressInfo.state
             sessionData.subLocality = addressInfo.city
         } else {
-            print("⚠️ No GPS coordinates available, address fields will be nil")
+            print("⚠️ No GPS coordinates provided from Shortcuts, address fields will be nil")
             sessionData.street = nil
             sessionData.city = nil
             sessionData.state = nil
@@ -108,60 +114,6 @@ struct CollectDataIntent: AppIntent {
         sessionData.screenBrightness = 0
         
         return sessionData
-    }
-    
-    // MARK: - Location Data Collection
-    
-    private func collectLocationDataInBackground() async throws -> (latitude: Double?, longitude: Double?) {
-        let locationManager = CLLocationManager()
-        
-        // Request location permission
-        let authStatus = CLLocationManager.authorizationStatus()
-        guard authStatus == .authorizedWhenInUse || authStatus == .authorizedAlways else {
-            print("⚠️ Location permission not granted")
-            return (nil, nil)
-        }
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            var hasReceivedLocation = false
-            
-            let locationDelegate = LocationDelegate(completion: { location, error in
-                guard !hasReceivedLocation else { return }
-                hasReceivedLocation = true
-                
-                if let error = error {
-                    print("❌ Location error: \(error)")
-                    continuation.resume(returning: (nil, nil))
-                    return
-                }
-                
-                guard let location = location else {
-                    print("⚠️ No location data received")
-                    continuation.resume(returning: (nil, nil))
-                    return
-                }
-                
-                print("✅ GPS coordinates collected: \(location.coordinate.latitude), \(location.coordinate.longitude)")
-                continuation.resume(returning: (
-                    location.coordinate.latitude,
-                    location.coordinate.longitude
-                ))
-            })
-            
-            // Set up location manager
-            locationManager.delegate = locationDelegate
-            locationManager.desiredAccuracy = kCLLocationAccuracyBest
-            locationManager.requestLocation()
-            
-            // Timeout after 10 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-                if !hasReceivedLocation {
-                    hasReceivedLocation = true
-                    print("⚠️ Location timeout")
-                    continuation.resume(returning: (nil, nil))
-                }
-            }
-        }
     }
     
     // MARK: - Address Parsing from GPS
@@ -529,24 +481,6 @@ struct CollectDataIntent: AppIntent {
         let physicalMemory = processInfo.physicalMemory
         let memoryUsage = Double(processInfo.physicalMemory - processInfo.physicalMemory) / Double(physicalMemory)
         return min(max(memoryUsage, 0.0), 1.0) * 100.0
-    }
-}
-
-// MARK: - Location Manager Delegate
-
-class LocationDelegate: NSObject, CLLocationManagerDelegate {
-    private let completion: (CLLocation?, Error?) -> Void
-    
-    init(completion: @escaping (CLLocation?, Error?) -> Void) {
-        self.completion = completion
-    }
-    
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        completion(locations.first, nil)
-    }
-    
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        completion(nil, error)
     }
 }
 
