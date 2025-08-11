@@ -18,14 +18,17 @@ struct CollectDataIntent: AppIntent {
     @Parameter(title: "NFC Info", description: "NFC tag UID or information", default: "")
     var nfc: String
     
-    @Parameter(title: "Location", description: "Location object from Shortcuts Get Current Location action", default: "")
-    var location: String
+    @Parameter(title: "Latitude", description: "GPS latitude coordinate from Shortcuts", default: 0.0)
+    var latitude: Double
+    
+    @Parameter(title: "Longitude", description: "GPS longitude coordinate from Shortcuts", default: 0.0)
+    var longitude: Double
     
     func perform() async throws -> some IntentResult & ProvidesDialog {
         print("🎯 Starting background data collection via App Intent")
         print("🌐 WiFi from Shortcuts: \(wifi)")
         print("🏷️ NFC from Shortcuts: \(nfc)")
-        print("📍 Location from Shortcuts: \(location)")
+        print("📍 GPS from Shortcuts: \(latitude), \(longitude)")
         print("📱 App Intent mode: Using parameters from Shortcuts, not triggering location services")
         
         // Set App Intent mode flag to prevent automatic location updates
@@ -52,7 +55,7 @@ struct CollectDataIntent: AppIntent {
             
             print("✅ Background data collection completed successfully")
             
-            return .result(dialog: IntentDialog("Data collected: WiFi: \(wifi), NFC: \(nfc), Location: \(location)"))
+            return .result(dialog: IntentDialog("Data collected: WiFi: \(wifi), NFC: \(nfc), Location: \(latitude), \(longitude)"))
             
         } catch {
             // Clear App Intent mode flag on error
@@ -70,15 +73,14 @@ struct CollectDataIntent: AppIntent {
         let sessionData = NFCSessionData()
         sessionData.timestamp = Date()
         
-        print("📍 Parsing location data from Shortcuts parameters...")
-        let (latitude, longitude) = parseLocationFromShortcuts(location)
+        print("📍 Using GPS coordinates from Shortcuts parameters...")
         sessionData.latitude = latitude
         sessionData.longitude = longitude
         
         // Parse address information from GPS coordinates
-        if let lat = latitude, let lon = longitude {
+        if latitude != 0.0 && longitude != 0.0 {
             print("🏠 Parsing address from GPS coordinates...")
-            let addressInfo = try await parseAddressFromCoordinates(latitude: lat, longitude: lon)
+            let addressInfo = try await parseAddressFromCoordinates(latitude: latitude, longitude: longitude)
             sessionData.street = addressInfo.street
             sessionData.city = addressInfo.city
             sessionData.state = addressInfo.state
@@ -87,7 +89,7 @@ struct CollectDataIntent: AppIntent {
             sessionData.administrativeArea = addressInfo.state
             sessionData.subLocality = addressInfo.city
         } else {
-            print("⚠️ No valid GPS coordinates found in location string, address fields will be nil")
+            print("⚠️ No GPS coordinates provided from Shortcuts, address fields will be nil")
             sessionData.street = nil
             sessionData.city = nil
             sessionData.state = nil
@@ -129,78 +131,17 @@ struct CollectDataIntent: AppIntent {
     
     // MARK: - Location Parsing from Shortcuts
     
-    private func parseLocationFromShortcuts(_ locationString: String) -> (latitude: Double?, longitude: Double?) {
-        print("🔍 Parsing location string: \(locationString)")
+    private func parseLocationFromShortcuts(latitude: Double, longitude: Double) -> (latitude: Double?, longitude: Double?) {
+        print("🔍 Received GPS coordinates: \(latitude), \(longitude)")
         
-        // Shortcuts Location object typically contains coordinates in various formats
-        // Try to extract latitude and longitude from the string
-        
-        // Method 1: Look for coordinate patterns like "37.7749, -122.4194"
-        let coordinatePattern = #"(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)"#
-        if let regex = try? NSRegularExpression(pattern: coordinatePattern),
-           let match = regex.firstMatch(in: locationString, range: NSRange(locationString.startIndex..., in: locationString)) {
-            
-            let latitudeRange = Range(match.range(at: 1), in: locationString)!
-            let longitudeRange = Range(match.range(at: 2), in: locationString)!
-            
-            let latitudeString = String(locationString[latitudeRange])
-            let longitudeString = String(locationString[longitudeRange])
-            
-            if let lat = Double(latitudeString), let lon = Double(longitudeString) {
-                print("✅ Extracted coordinates: \(lat), \(lon)")
-                return (lat, lon)
-            }
+        // Validate coordinate ranges
+        if latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180 {
+            print("✅ Valid GPS coordinates: \(latitude), \(longitude)")
+            return (latitude, longitude)
+        } else {
+            print("❌ Invalid GPS coordinates: \(latitude), \(longitude)")
+            return (nil, nil)
         }
-        
-        // Method 2: Look for individual coordinate values
-        let latPattern = #"latitude[:\s]*(-?\d+\.\d+)"#
-        let lonPattern = #"longitude[:\s]*(-?\d+\.\d+)"#
-        
-        var extractedLat: Double?
-        var extractedLon: Double?
-        
-        if let latRegex = try? NSRegularExpression(pattern: latPattern),
-           let latMatch = latRegex.firstMatch(in: locationString, range: NSRange(locationString.startIndex..., in: locationString)) {
-            let latRange = Range(latMatch.range(at: 1), in: locationString)!
-            let latString = String(locationString[latRange])
-            extractedLat = Double(latString)
-        }
-        
-        if let lonRegex = try? NSRegularExpression(pattern: lonPattern),
-           let lonMatch = lonRegex.firstMatch(in: locationString, range: NSRange(locationString.startIndex..., in: locationString)) {
-            let lonRange = Range(lonMatch.range(at: 1), in: locationString)!
-            let lonString = String(locationString[lonRange])
-            extractedLon = Double(lonString)
-        }
-        
-        if let lat = extractedLat, let lon = extractedLon {
-            print("✅ Extracted coordinates from labels: \(lat), \(lon)")
-            return (lat, lon)
-        }
-        
-        // Method 3: Look for any two decimal numbers that could be coordinates
-        let numberPattern = #"(-?\d+\.\d+)"#
-        if let regex = try? NSRegularExpression(pattern: numberPattern) {
-            let matches = regex.matches(in: locationString, range: NSRange(locationString.startIndex..., in: locationString))
-            if matches.count >= 2 {
-                let firstRange = Range(matches[0].range, in: locationString)!
-                let secondRange = Range(matches[1].range, in: locationString)!
-                
-                let firstNumber = String(locationString[firstRange])
-                let secondNumber = String(locationString[secondRange])
-                
-                if let lat = Double(firstNumber), let lon = Double(secondNumber) {
-                    // Validate reasonable coordinate ranges
-                    if lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 {
-                        print("✅ Extracted coordinates from numbers: \(lat), \(lon)")
-                        return (lat, lon)
-                    }
-                }
-            }
-        }
-        
-        print("❌ Could not extract valid coordinates from location string")
-        return (nil, nil)
     }
     
     // MARK: - Address Parsing from GPS
