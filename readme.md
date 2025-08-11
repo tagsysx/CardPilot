@@ -1,7 +1,7 @@
 # CardPilot - NFC Data Collection App
 
-**当前版本**: 1.1  
-**最后更新**: 2025年8月11日
+**Current Version**: 1.1  
+**Last Updated**: August 11, 2025
 
 CardPilot is an iOS app designed to automatically collect and record device data when triggered by NFC interactions through iOS Shortcuts. The app captures GPS location, IP address, IMU sensor data, and information about the triggering context.
 
@@ -17,18 +17,18 @@ CardPilot is an iOS app designed to automatically collect and record device data
 - **Data Persistence**: All collected data is stored locally using SwiftData
 - **Beautiful UI**: Modern interface to view and manage collected sessions
 
-## 版本 1.1 更新内容
+## Version 1.1 Updates
 
-### 🐛 Bug修复
-- **修复NFC session重复记录问题**
-  - 解决了每次NFC触发会创建两条相同session记录的问题
-  - 优化了URL scheme处理流程，避免重复调用
-  - 提升了应用性能和稳定性
+### 🐛 Bug Fixes
+- **Fixed NFC session duplicate recording issue**
+  - Resolved the problem where each NFC trigger created two identical session records
+  - Optimized URL scheme handling process to avoid duplicate calls
+  - Improved application performance and stability
 
-### 🔧 技术改进
-- 简化了代码结构，减少了重复逻辑
-- 优化了数据收集流程
-- 改进了错误处理机制
+### 🔧 Technical Improvements
+- Simplified code structure and reduced redundant logic
+- Optimized data collection workflow
+- Enhanced error handling mechanisms
 
 ## How It Works
 
@@ -59,63 +59,63 @@ To set up CardPilot with iOS Shortcuts for NFC triggering:
 
 CardPilot supports custom URL schemes for external triggering. The app uses the following URL format:
 
-#### 基本格式
+#### Basic Format
 ```
-cardpilot://collect?[参数1=值1]&[参数2=值2]&...
+cardpilot://collect?[parameter1=value1]&[parameter2=value2]&...
 ```
 
-#### 完整URL示例
+#### Complete URL Example
 ```
 cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=MyWiFi&nfc=123456789
 ```
 
-#### 支持的URL参数
+#### Supported URL Parameters
 
-| 参数名 | 类型 | 必需 | 说明 | 示例值 |
-|--------|------|------|------|--------|
-| `sourceApp` | String | 否 | 触发应用的名称 | `Shortcuts`, `NFC`, `Manual` |
-| `autoExit` | Boolean | 否 | 数据收集完成后是否自动退出应用 | `true`, `false` |
-| `silent` | Boolean | 否 | 是否启用静默模式（减少UI反馈） | `true`, `false` |
-| `ssid` | String | 否 | WiFi网络名称（通常从Shortcuts传入） | `MyWiFi`, `Office_5G` |
-| `nfc` | String | 否 | NFC标签UID或标识符 | `123456789`, `tag_001` |
+| Parameter | Type | Required | Description | Example Values |
+|-----------|------|----------|-------------|----------------|
+| `sourceApp` | String | No | Name of the triggering application | `Shortcuts`, `NFC`, `Manual` |
+| `autoExit` | Boolean | No | Whether to automatically exit app after data collection | `true`, `false` |
+| `silent` | Boolean | No | Whether to enable silent mode (reduced UI feedback) | `true`, `false` |
+| `ssid` | String | No | WiFi network name (usually passed from Shortcuts) | `MyWiFi`, `Office_5G` |
+| `nfc` | String | No | NFC tag UID or identifier | `123456789`, `tag_001` |
 
-#### URL参数详细说明
+#### Detailed Parameter Descriptions
 
-**sourceApp 参数**
-- 用于标识触发数据收集的应用或来源
-- 会显示在收集的数据中，便于后续分析
-- 常用值：`Shortcuts`（快捷指令）、`NFC`（NFC标签）、`Manual`（手动触发）
+**sourceApp Parameter**
+- Used to identify the application or source that triggered data collection
+- Will be displayed in the collected data for subsequent analysis
+- Common values: `Shortcuts` (Shortcuts app), `NFC` (NFC tag), `Manual` (manual trigger)
 
-**autoExit 参数**
-- 设置为 `true` 时，数据收集完成后应用会自动退出
-- 设置为 `false` 或不设置时，用户需要手动退出应用
-- 适用于自动化场景，减少用户干预
+**autoExit Parameter**
+- When set to `true`, the app will automatically exit after data collection is complete
+- When set to `false` or not set, users need to manually exit the app
+- Suitable for automation scenarios to reduce user intervention
 
-**silent 参数**
-- 设置为 `true` 时，减少用户界面反馈和提示
-- 设置为 `false` 或不设置时，显示正常的用户界面
-- 适用于后台或自动化数据收集
+**silent Parameter**
+- When set to `true`, reduces user interface feedback and prompts
+- When set to `false` or not set, displays normal user interface
+- Suitable for background or automated data collection
 
-**ssid 参数**
-- 传入WiFi网络名称，用于记录当前网络环境
-- 由于iOS隐私限制，通常通过Shortcuts应用获取并传入
-- 如果未提供，应用会尝试获取网络连接状态
+**ssid Parameter**
+- Passes WiFi network name to record current network environment
+- Due to iOS privacy restrictions, usually obtained and passed through Shortcuts app
+- If not provided, the app will attempt to get network connection status
 
-**nfc 参数**
-- 传入NFC标签的UID或自定义标识符
-- 用于关联特定的NFC标签和使用场景
-- 便于后续数据分析和标签管理
+**nfc Parameter**
+- Passes NFC tag UID or custom identifier
+- Used to associate specific NFC tags with usage scenarios
+- Facilitates subsequent data analysis and tag management
 
-#### 最小化URL示例
+#### Minimal URL Example
 
-如果只需要基本的数据收集，可以使用最简单的URL：
+For basic data collection only, you can use the simplest URL:
 ```
 cardpilot://collect
 ```
 
-#### 自动化场景URL示例
+#### Automation Scenario URL Example
 
-适用于Shortcuts自动化的URL：
+URL suitable for Shortcuts automation:
 ```
 cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true
 ```
@@ -181,28 +181,28 @@ Each NFC session records:
 
 ### URL Scheme Trigger
 
-#### 在iOS Shortcuts中使用
-在Shortcuts应用中，添加"Open URL"动作：
+#### Using in iOS Shortcuts
+In the Shortcuts app, add an "Open URL" action:
 ```
 cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&nfc=[NFC_UID]
 ```
 
-#### 在其他应用中编程调用
+#### Programmatic Calls in Other Apps
 ```swift
-// 基本调用
+// Basic call
 if let url = URL(string: "cardpilot://collect") {
     UIApplication.shared.open(url)
 }
 
-// 带参数调用
+// Call with parameters
 let urlString = "cardpilot://collect?sourceApp=MyApp&autoExit=true&silent=true&ssid=\(wifiSSID)&nfc=\(nfcUID)"
 if let url = URL(string: urlString) {
     UIApplication.shared.open(url)
 }
 ```
 
-#### Safari中测试
-你也可以在Safari中直接输入URL来测试：
+#### Testing in Safari
+You can also test by directly entering the URL in Safari:
 ```
 cardpilot://collect?sourceApp=Safari&autoExit=false
 ```
