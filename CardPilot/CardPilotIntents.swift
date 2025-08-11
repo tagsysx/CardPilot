@@ -272,15 +272,7 @@ struct CollectDataIntent: AppIntent {
         
         print("🔧 collectSensorDataInBackground: Starting sensor data collection...")
         
-        // Set overall timeout for sensor data collection
-        let overallTimeout = Task {
-            try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 second overall timeout
-            print("⚠️ Overall sensor data collection timed out after 10 seconds")
-        }
-        
-        defer {
-            overallTimeout.cancel()
-        }
+        // Note: Individual sensor collection functions have their own timeouts
         
         // Collect sensor data
         print("🔧 Collecting magnetometer data...")
@@ -343,17 +335,29 @@ struct CollectDataIntent: AppIntent {
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data?, Error>) in
             motionManager.magnetometerUpdateInterval = 0.1
             
+            // Use a flag to ensure continuation is only resumed once
+            var hasResumed = false
+            
             // Set a timeout for magnetometer data collection
             let timeoutTask = Task {
                 try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 second timeout
                 print("⚠️ Magnetometer data collection timed out after 3 seconds")
                 motionManager.stopMagnetometerUpdates()
-                continuation.resume(returning: nil)
+                
+                // Only resume if not already resumed
+                if !hasResumed {
+                    hasResumed = true
+                    continuation.resume(returning: nil)
+                }
             }
             
             motionManager.startMagnetometerUpdates(to: .main) { data, error in
                 timeoutTask.cancel() // Cancel timeout task
                 motionManager.stopMagnetometerUpdates()
+                
+                // Only proceed if not already resumed
+                guard !hasResumed else { return }
+                hasResumed = true
                 
                 if let error = error {
                     print("❌ Magnetometer error: \(error)")
@@ -402,17 +406,29 @@ struct CollectDataIntent: AppIntent {
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data?, Error>) in
             let altimeter = CMAltimeter()
             
+            // Use a flag to ensure continuation is only resumed once
+            var hasResumed = false
+            
             // Set a timeout for barometer data collection
             let timeoutTask = Task {
                 try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 second timeout
                 print("⚠️ Barometer data collection timed out after 3 seconds")
                 altimeter.stopRelativeAltitudeUpdates()
-                continuation.resume(returning: nil)
+                
+                // Only resume if not already resumed
+                if !hasResumed {
+                    hasResumed = true
+                    continuation.resume(returning: nil)
+                }
             }
             
             altimeter.startRelativeAltitudeUpdates(to: .main) { data, error in
                 timeoutTask.cancel() // Cancel timeout task
                 altimeter.stopRelativeAltitudeUpdates()
+                
+                // Only proceed if not already resumed
+                guard !hasResumed else { return }
+                hasResumed = true
                 
                 if let error = error {
                     print("❌ Barometer error: \(error)")
@@ -490,11 +506,18 @@ struct CollectDataIntent: AppIntent {
             var dataPoints: [IMUDataPoint] = []
             let startTime = Date()
             
+            // Use a flag to ensure continuation is only resumed once
+            var hasResumed = false
+            
             // Set a timeout for IMU data collection based on user settings
             let timeoutTask = Task {
                 try? await Task.sleep(nanoseconds: UInt64(collectionDuration * 1_000_000_000))
                 print("⚠️ IMU data collection completed after \(collectionDuration) seconds")
                 motionManager.stopDeviceMotionUpdates()
+                
+                // Only resume if not already resumed
+                guard !hasResumed else { return }
+                hasResumed = true
                 
                 if !dataPoints.isEmpty {
                     let imuSession = IMUSession(
@@ -522,6 +545,10 @@ struct CollectDataIntent: AppIntent {
                     print("❌ IMU error: \(error)")
                     timeoutTask.cancel()
                     motionManager.stopDeviceMotionUpdates()
+                    
+                    // Only resume if not already resumed
+                    guard !hasResumed else { return }
+                    hasResumed = true
                     continuation.resume(returning: nil)
                     return
                 }
@@ -549,6 +576,10 @@ struct CollectDataIntent: AppIntent {
                 if elapsedTime >= collectionDuration {
                     timeoutTask.cancel()
                     motionManager.stopDeviceMotionUpdates()
+                    
+                    // Only resume if not already resumed
+                    guard !hasResumed else { return }
+                    hasResumed = true
                     
                     let imuSession = IMUSession(
                         dataPoints: dataPoints,
