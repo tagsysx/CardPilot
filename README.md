@@ -1,7 +1,8 @@
 # CardPilot - NFC Data Collection App
 
 **Current Version**: 1.3
-**Last Updated**: January 2025
+**Last Updated**: 2025/8/11
+
 CardPilot is an iOS app designed to automatically collect and record device data when triggered by NFC interactions through iOS Shortcuts. The app captures GPS location, IP address, IMU sensor data, and information about the triggering context.
 
 ## Features
@@ -16,18 +17,22 @@ CardPilot is an iOS app designed to automatically collect and record device data
 - **Data Persistence**: All collected data is stored locally using SwiftData
 - **Beautiful UI**: Modern interface to view and manage collected sessions
 
-## Version 1.1 Updates
+## Version 1.3 Updates
+
+### 🚀 New Features
+- **App Intents Support**: Added native iOS 16+ App Intents for seamless Shortcuts integration
+- **Background Data Collection**: App Intents can collect data without opening the app interface
+- **Enhanced Parameter Handling**: Better WiFi, NFC, and GPS coordinate parameter support
 
 ### 🐛 Bug Fixes
-- **Fixed NFC session duplicate recording issue**
-  - Resolved the problem where each NFC trigger created two identical session records
-  - Optimized URL scheme handling process to avoid duplicate calls
-  - Improved application performance and stability
+- **Fixed Swift Task Continuation Misuse**: Resolved fatal error in sensor data collection functions
+- **Improved Concurrency Safety**: Added guards to prevent multiple continuation resumes
+- **Enhanced Sensor Data Collection**: Fixed magnetometer, barometer, and IMU data collection timeouts
 
 ### 🔧 Technical Improvements
-- Simplified code structure and reduced redundant logic
-- Optimized data collection workflow
-- Enhanced error handling mechanisms
+- Optimized sensor data collection with proper timeout handling
+- Enhanced error handling for concurrent operations
+- Improved data collection reliability and stability
 
 ## How It Works
 
@@ -43,33 +48,66 @@ CardPilot is an iOS app designed to automatically collect and record device data
 
 ## Setup Instructions
 
-### 1. iOS Shortcuts Configuration
+### 🎯 Method 1: App Intents (Recommended for iOS 16+)
 
-To set up CardPilot with iOS Shortcuts for NFC triggering using URL Scheme:
+**App Intents provide the best user experience with native Shortcuts integration and background data collection.**
 
-1. Open the **Shortcuts** app on your iOS device
-2. Create a new shortcut
-3. Add the "NFC" trigger
-4. Add "Get Current WiFi Network" action to capture WiFi details
-5. Add "Get Details of WiFi Network" action and select "SSID"
-6. Add "Open URLs" action (not "Open App")
-7. Set the URL to: `cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=[WiFi Variable]&nfc=[Shortcut Input]`
-8. Replace `[WiFi Variable]` with the SSID variable from step 5
-9. Replace `[Shortcut Input]` with the "Shortcut Input" variable (this automatically contains the NFC tag data when triggered)
-10. Save the shortcut
+#### Setup Steps
 
-**Alternative: Simple NFC-only setup**
-If you only need NFC triggering without WiFi details:
-1. Add "NFC" trigger
-2. Add "Open URLs" action
-3. Set URL to: `cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true`
-4. Save the shortcut
+1. **Open the Shortcuts app** on your iOS device
+2. **Create a new shortcut**
+3. **Add NFC trigger** - This automatically creates a "Shortcut Input" variable
+4. **Add "Get Details of WiFi Network"** action to capture WiFi name
+5. **Add "Get Details of WiFi Network"** action and select "SSID"
+6. **Add "Get Current Location"** action to get GPS coordinates
+7. **Choose "CardPilit" app
+8. **Add "Collect Sensor Data"** action** - This appears under CardPilot app
+9. **Configure parameters**:
+   - **WiFi Info**: Set to WiFi SSID variables (name[SSID]) from step 4 and 5
+   - **NFC Info**: Set to "Shortcut Input" variable (contains NFC tag data)
+   - **Latitude**: Set to "Latitude" variable from "Get Current Location"
+   - **Longitude**: Set to "Longitude" variable from "Get Current Location"
+10. **Save the shortcut**
 
-### 2. URL Scheme Integration
+#### Example Shortcut Workflow
+```
+NFC Trigger → Get WiFi Network → Get Current Location → Collect Sensor Data
+```
 
-CardPilot supports custom URL schemes for external triggering. The app uses the following URL format:
+#### Benefits of App Intents
+- ✅ **Background Execution**: Data collection happens without opening the app
+- ✅ **Native Integration**: Seamless Shortcuts workflow
+- ✅ **Parameter Validation**: Type-safe parameters prevent errors
+- ✅ **Privacy Compliance**: Automatically skips microphone recording
+- ✅ **Better Performance**: No app switching or UI loading
 
-#### Basic Format
+### 🔗 Method 2: URL Scheme Integration
+
+**URL Scheme method works on all iOS versions and provides more control over app behavior.**
+
+#### URL Scheme Configuration
+
+First, you need to configure the URL scheme in your iOS device:
+
+1. **Go to Settings** → **Shortcuts** → **Advanced**
+2. **Enable "Allow Running Shortcuts"** if not already enabled
+3. **The URL scheme `cardpilot://` is automatically registered** when the app is installed
+
+#### Basic Setup
+
+1. **Open the Shortcuts app** on your iOS device
+2. **Create a new shortcut**
+3. **Add NFC trigger**
+4. **Add "Get Current WiFi Network"** action
+5. **Add "Get Details of WiFi Network"** action and select "SSID"
+6. **Add "Open URLs"** action (not "Open App")
+7. **Set the URL** to: `cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=[WiFi Variable]&nfc=[Shortcut Input]`
+8. **Replace variables**:
+   - `[WiFi Variable]` with the SSID variable from step 5
+   - `[Shortcut Input]` with the "Shortcut Input" variable (contains NFC tag data)
+9. **Save the shortcut**
+
+#### URL Format
 ```
 cardpilot://collect?[parameter1=value1]&[parameter2=value2]&...
 ```
@@ -89,53 +127,101 @@ cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=MyWiFi&nf
 | `ssid` | String | No | WiFi network name (usually passed from Shortcuts) | `MyWiFi`, `Office_5G` |
 | `nfc` | String | No | NFC tag UID or identifier | `123456789`, `tag_001` |
 
-#### Detailed Parameter Descriptions
+#### Advanced URL Scheme Examples
 
-**sourceApp Parameter**
-- Used to identify the application or source that triggered data collection
-- Will be displayed in the collected data for subsequent analysis
-- Common values: `Shortcuts` (Shortcuts app), `NFC` (NFC tag), `Manual` (manual trigger)
-
-**autoExit Parameter**
-- When set to `true`, the app will automatically exit after data collection is complete
-- When set to `false` or not set, users need to manually exit the app
-- Suitable for automation scenarios to reduce user intervention
-
-**silent Parameter**
-- When set to `true`, reduces user interface feedback and prompts
-- When set to `false` or not set, displays normal user interface
-- Suitable for background or automated data collection
-
-**ssid Parameter**
-- Passes WiFi network name to record current network environment
-- Due to iOS privacy restrictions, usually obtained and passed through Shortcuts app
-- If not provided, the app will attempt to get network connection status
-
-**nfc Parameter**
-- Passes NFC tag UID or custom identifier from the Shortcuts input variable
-- Automatically populated when using NFC trigger in iOS Shortcuts
-- The value comes from `[Shortcut Input]` variable which contains the NFC tag data
-- Used to associate specific NFC tags with usage scenarios
-- Facilitates subsequent data analysis and tag management
-- When using NFC trigger in Shortcuts, this parameter is automatically filled with the scanned NFC tag information
-
-#### Minimal URL Example
-
-For basic data collection only, you can use the simplest URL:
+**Basic NFC Collection:**
 ```
-cardpilot://collect
+cardpilot://collect?sourceApp=Shortcuts&autoExit=true
 ```
 
-#### Automation Scenario URL Example
+**With WiFi and NFC Data:**
+```
+cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=[WiFi Variable]&nfc=[Shortcut Input]
+```
 
-URL suitable for Shortcuts automation:
+**Manual Testing (without auto-exit):**
+```
+cardpilot://collect?sourceApp=Manual&autoExit=false&silent=false
+```
+
+**Silent Background Collection:**
 ```
 cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true
 ```
 
-### 3. Manual Testing
+#### Simple NFC-only Setup
+If you only need NFC triggering without WiFi details:
+```
+cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true
+```
 
-The app includes a manual trigger button for testing data collection functionality without NFC.
+### 📱 Method Comparison
+
+| Feature | App Intents | URL Scheme |
+|---------|------------|------------|
+| **iOS Version** | ✅ iOS 16+ | ✅ iOS 14+ |
+| **Background Execution** | ✅ No app opening | ❌ Opens app interface |
+| **Native Integration** | ✅ Full Shortcuts support | ⚠️ Basic URL opening |
+| **Parameter Validation** | ✅ Type-safe parameters | ⚠️ String parsing |
+| **User Experience** | ✅ Seamless workflow | ⚠️ App switching |
+| **Privacy Compliance** | ✅ Microphone auto-skip | ⚠️ Manual control |
+| **Setup Complexity** | ⚠️ More steps | ✅ Simpler setup |
+| **Customization** | ⚠️ Limited parameters | ✅ Full URL control |
+| **Debugging** | ⚠️ Limited visibility | ✅ Full app interface |
+| **Offline Support** | ✅ Always available | ✅ Always available |
+
+## Data Collection Strategy
+
+### App Intents Approach (Recommended)
+- **GPS Coordinates**: Provided by Shortcuts as separate Latitude and Longitude parameters
+- **Address Information**: Automatically parsed from GPS coordinates using reverse geocoding
+- **WiFi SSID**: Prioritized from Shortcuts, fallback to system detection
+- **NFC Data**: Directly from Shortcuts parameters
+- **Sensor Data**: All available sensors collected in background (excluding microphone)
+
+### URL Scheme Approach
+- **GPS Coordinates**: Collected by the app when launched
+- **Address Information**: Automatically generated from GPS coordinates
+- **WiFi SSID**: From Shortcuts parameters or system detection
+- **NFC Data**: From Shortcuts parameters
+- **Sensor Data**: All available sensors collected (including microphone if permitted)
+
+## Usage Examples
+
+### App Intents Example (iOS 16+)
+1. **NFC Trigger** → Automatically scans NFC tag
+2. **Get WiFi Network** → Captures current WiFi SSID
+3. **Get Current Location** → Gets GPS coordinates
+4. **Collect Sensor Data** → Background data collection
+5. **Data automatically saved** without opening CardPilot app
+
+**Advantages:**
+- ✅ Completely seamless user experience
+- ✅ No app switching or loading screens
+- ✅ Data collection happens in background
+- ✅ Automatic parameter validation
+
+### URL Scheme Example
+1. **NFC Trigger** → Scans NFC tag
+2. **Get WiFi Network** → Captures WiFi SSID
+3. **Open URL** → Launches CardPilot with parameters
+4. **App opens** and collects data
+5. **Auto-exit** after completion (if configured)
+
+**Advantages:**
+- ✅ Works on all iOS versions
+- ✅ Full control over app behavior
+- ✅ Can customize collection parameters
+- ✅ Easy to debug and troubleshoot
+
+### Manual Testing
+Use the "Trigger Data Collection" button in the app for testing without NFC.
+
+### Testing URL Schemes
+You can test URL schemes directly in Safari by typing:
+```
+cardpilot://collect?sourceApp=Test&autoExit=false&silent=false
+```
 
 ## Permissions Required
 
@@ -175,6 +261,7 @@ Each NFC session records:
 4. **SensorManager**: Collects IMU sensor data and audio recordings
 5. **CurrentAppDetector**: Attempts to identify triggering application
 6. **NFCDataCollectionService**: Orchestrates all data collection operations
+7. **App Intents**: Native iOS 16+ Shortcuts integration
 
 ### Architecture
 
@@ -184,75 +271,17 @@ Each NFC session records:
 - **CoreMotion**: Accelerometer, gyroscope, and magnetometer data
 - **AVFoundation**: Audio recording capabilities
 - **Combine**: Reactive programming for data flows
-
-## Usage Examples
-
-### Basic NFC Trigger
-1. Set up iOS Shortcut with NFC trigger and URL Scheme
-2. Configure WiFi details capture (optional but recommended)
-3. Tap NFC tag with device
-4. CardPilot automatically launches via URL Scheme and collects data
-5. View collected data in the app interface
-
-### URL Scheme Trigger
-
-#### Using in iOS Shortcuts
-In the Shortcuts app, add an "Open URL" action:
-
-**With WiFi details and NFC input (recommended):**
-```
-cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=[WiFi_SSID]&nfc=[Shortcut Input]
-```
-
-**With NFC input only:**
-```
-cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&nfc=[Shortcut Input]
-```
-
-**Important Notes:**
-- The `[Shortcut Input]` variable is automatically available when using an NFC trigger in Shortcuts
-- This variable contains the NFC tag data (UID, content, etc.) that was scanned
-- Replace `[WiFi_SSID]` with the actual WiFi network name variable from your Shortcuts workflow
-- The NFC parameter helps identify which specific tag triggered the data collection
-
-#### Understanding NFC Input Variables in Shortcuts
-
-When you add an **NFC trigger** to your shortcut:
-1. iOS Shortcuts automatically creates a `Shortcut Input` variable
-2. This variable contains information about the scanned NFC tag
-3. You can directly use this variable in the URL by adding `&nfc=[Shortcut Input]`
-4. CardPilot will receive and store this NFC tag information for analysis
-
-#### Programmatic Calls in Other Apps
-```swift
-// Basic call
-if let url = URL(string: "cardpilot://collect") {
-    UIApplication.shared.open(url)
-}
-
-// Call with parameters
-let urlString = "cardpilot://collect?sourceApp=MyApp&autoExit=true&silent=true&ssid=\(wifiSSID)&nfc=\(nfcUID)"
-if let url = URL(string: urlString) {
-    UIApplication.shared.open(url)
-}
-```
-
-#### Testing in Safari
-You can also test by directly entering the URL in Safari:
-```
-cardpilot://collect?sourceApp=Safari&autoExit=false
-```
-
-### Manual Trigger
-Use the "Trigger Data Collection" button in the app for testing.
+- **App Intents**: Native iOS automation framework
 
 ## Development Notes
 
-- Minimum iOS version: 17.0
-- Built with Swift 5.9+ and SwiftUI
-- Uses async/await for concurrent operations
-- Implements proper error handling and user feedback
-- Follows iOS Human Interface Guidelines
+- **Minimum iOS version**: 17.0
+- **App Intents support**: iOS 16+ (recommended)
+- **URL Scheme support**: iOS 14+ (fallback)
+- **Built with**: Swift 5.9+ and SwiftUI
+- **Uses**: async/await for concurrent operations
+- **Implements**: Proper error handling and user feedback
+- **Follows**: iOS Human Interface Guidelines
 
 ## Privacy & Security
 
@@ -261,6 +290,7 @@ Use the "Trigger Data Collection" button in the app for testing.
 - Users can delete individual sessions or all data
 - App requests only necessary permissions
 - Location and motion data collection is transparent to users
+- App Intents automatically skip microphone recording for privacy
 
 ## Future Enhancements
 
@@ -270,7 +300,12 @@ Potential improvements could include:
 - Advanced analytics and visualizations
 - Custom data collection intervals
 - Integration with additional sensor types
+- Enhanced App Intents with more automation options
 
 ## Support
 
 For technical support or feature requests, please refer to the project documentation or contact the development team.
+
+---
+
+**Note**: App Intents provide the best user experience for iOS 16+ users, while URL Scheme remains a reliable fallback for older iOS versions and advanced customization needs.
