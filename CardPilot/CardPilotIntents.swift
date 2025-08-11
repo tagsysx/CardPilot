@@ -18,8 +18,26 @@ struct CollectDataIntent: AppIntent {
     @Parameter(title: "NFC Info", description: "NFC tag UID or information", default: "")
     var nfc: String
     
+    @Parameter(title: "Street", description: "Street address", default: "")
+    var street: String
+    
+    @Parameter(title: "City", description: "City name", default: "")
+    var city: String
+    
+    @Parameter(title: "State", description: "State or province", default: "")
+    var state: String
+    
+    @Parameter(title: "Country", description: "Country name", default: "")
+    var country: String
+    
+    @Parameter(title: "Postal Code", description: "Postal or ZIP code", default: "")
+    var postalCode: String
+    
     func perform() async throws -> some IntentResult & ProvidesDialog {
         print("🎯 Starting background data collection via App Intent")
+        print("📍 Address from Shortcuts: \(street), \(city), \(state), \(country) \(postalCode)")
+        print("🌐 WiFi from Shortcuts: \(wifi)")
+        print("🏷️ NFC from Shortcuts: \(nfc)")
         
         do {
             // Create a temporary model context for data storage
@@ -37,7 +55,7 @@ struct CollectDataIntent: AppIntent {
             
             print("✅ Background data collection completed successfully")
             
-            return .result(dialog: IntentDialog("Data collected: WiFi: \(wifi), NFC: \(nfc), Location: \(sessionData.latitude ?? 0), \(sessionData.longitude ?? 0)"))
+            return .result(dialog: IntentDialog("Data collected: WiFi: \(wifi), NFC: \(nfc), Address: \(city), \(state)"))
             
         } catch {
             print("❌ Background data collection failed: \(error)")
@@ -51,31 +69,27 @@ struct CollectDataIntent: AppIntent {
         let sessionData = NFCSessionData()
         sessionData.timestamp = Date()
         
-        print("📊 Collecting location data...")
-        let locationData = try await collectLocationDataInBackground()
+        print("📊 Using address data from Shortcuts parameters...")
+        // Use address data directly from Shortcuts parameters
+        sessionData.street = street.isEmpty ? nil : street
+        sessionData.city = city.isEmpty ? nil : city
+        sessionData.state = state.isEmpty ? nil : state
+        sessionData.country = country.isEmpty ? nil : country
+        sessionData.postalCode = postalCode.isEmpty ? nil : postalCode
+        sessionData.administrativeArea = state.isEmpty ? nil : state
+        sessionData.subLocality = city.isEmpty ? nil : city
         
-        print("🌐 Collecting network data...")
+        // Note: We don't collect GPS coordinates since we have address from Shortcuts
+        sessionData.latitude = nil
+        sessionData.longitude = nil
+        
+        print("🌐 Using WiFi data from Shortcuts parameters...")
         let networkData = try await collectNetworkDataInBackground()
+        sessionData.ipAddress = networkData.ipAddress
+        sessionData.wifiSSID = networkData.wifiSSID
         
         print("📱 Collecting sensor data...")
         let sensorData = try await collectSensorDataInBackground()
-        
-        print("📱 Collecting device data...")
-        let deviceData = try await collectDeviceDataInBackground()
-        
-        // Populate session data
-        sessionData.latitude = locationData.latitude
-        sessionData.longitude = locationData.longitude
-        sessionData.street = locationData.street
-        sessionData.city = locationData.city
-        sessionData.state = locationData.state
-        sessionData.country = locationData.country
-        sessionData.postalCode = locationData.postalCode
-        sessionData.administrativeArea = locationData.administrativeArea
-        sessionData.subLocality = locationData.subLocality
-        
-        sessionData.ipAddress = networkData.ipAddress
-        sessionData.wifiSSID = networkData.wifiSSID
         
         sessionData.magnetometerData = sensorData.magnetometerData
         sessionData.barometerData = sensorData.barometerData
@@ -99,96 +113,19 @@ struct CollectDataIntent: AppIntent {
         return sessionData
     }
     
-    // MARK: - Location Data Collection
-    
-    private func collectLocationDataInBackground() async throws -> (latitude: Double?, longitude: Double?, street: String?, city: String?, state: String?, country: String?, postalCode: String?, administrativeArea: String?, subLocality: String?) {
-        let locationManager = CLLocationManager()
-        
-        // Request location permission
-        let authStatus = CLLocationManager.authorizationStatus()
-        guard authStatus == .authorizedWhenInUse || authStatus == .authorizedAlways else {
-            print("⚠️ Location permission not granted")
-            return (nil, nil, nil, nil, nil, nil, nil, nil, nil)
-        }
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            let manager = CLLocationManager()
-            manager.desiredAccuracy = kCLLocationAccuracyBest
-            manager.requestLocation()
-            
-            var hasReceivedLocation = false
-            
-            let locationHandler: (CLLocation?, Error?) -> Void = { location, error in
-                guard !hasReceivedLocation else { return }
-                hasReceivedLocation = true
-                
-                if let error = error {
-                    print("❌ Location error: \(error)")
-                    continuation.resume(throwing: error)
-                    return
-                }
-                
-                guard let location = location else {
-                    continuation.resume(throwing: NSError(domain: "Location", code: 0, userInfo: [NSLocalizedDescriptionKey: "No location data"]))
-                    return
-                }
-                
-                // Get address information
-                let geocoder = CLGeocoder()
-                geocoder.reverseGeocodeLocation(location) { placemarks, error in
-                    if let error = error {
-                        print("⚠️ Geocoding error: \(error)")
-                        // Continue with coordinates only
-                        continuation.resume(returning: (
-                            location.coordinate.latitude,
-                            location.coordinate.longitude,
-                            nil, nil, nil, nil, nil, nil, nil
-                        ))
-                    } else if let placemark = placemarks?.first {
-                        continuation.resume(returning: (
-                            location.coordinate.latitude,
-                            location.coordinate.longitude,
-                            placemark.thoroughfare,
-                            placemark.locality,
-                            placemark.administrativeArea,
-                            placemark.country,
-                            placemark.postalCode,
-                            placemark.administrativeArea,
-                            placemark.subLocality
-                        ))
-                    } else {
-                        continuation.resume(returning: (
-                            location.coordinate.latitude,
-                            location.coordinate.longitude,
-                            nil, nil, nil, nil, nil, nil, nil
-                        ))
-                    }
-                }
-            }
-            
-            // Set up location manager
-            manager.delegate = LocationDelegate(completion: locationHandler)
-            
-            // Timeout after 10 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-                if !hasReceivedLocation {
-                    hasReceivedLocation = true
-                    continuation.resume(throwing: NSError(domain: "Location", code: 1, userInfo: [NSLocalizedDescriptionKey: "Location timeout"]))
-                }
-            }
-        }
-    }
-    
     // MARK: - Network Data Collection
     
     private func collectNetworkDataInBackground() async throws -> (ipAddress: String?, wifiSSID: String?) {
         // Get IP address
         let ipAddress = try await getCurrentIPAddress()
         
-        // Get WiFi SSID (use provided parameter or try to get from system)
+        // Use WiFi SSID from Shortcuts parameters (priority)
         var wifiSSID = wifi
         if wifiSSID.isEmpty {
+            print("⚠️ No WiFi SSID provided from Shortcuts, trying to get from system...")
             wifiSSID = getWiFiSSIDFromSystem() ?? "Unknown"
+        } else {
+            print("✅ Using WiFi SSID from Shortcuts: \(wifiSSID)")
         }
         
         return (ipAddress, wifiSSID)
@@ -507,24 +444,6 @@ struct CollectDataIntent: AppIntent {
         let physicalMemory = processInfo.physicalMemory
         let memoryUsage = Double(processInfo.physicalMemory - processInfo.physicalMemory) / Double(physicalMemory)
         return min(max(memoryUsage, 0.0), 1.0) * 100.0
-    }
-}
-
-// MARK: - Location Manager Delegate
-
-class LocationDelegate: NSObject, CLLocationManagerDelegate {
-    private let completion: (CLLocation?, Error?) -> Void
-    
-    init(completion: @escaping (CLLocation?, Error?) -> Void) {
-        self.completion = completion
-    }
-    
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        completion(locations.first, nil)
-    }
-    
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        completion(nil, error)
     }
 }
 
