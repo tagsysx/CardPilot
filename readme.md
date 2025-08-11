@@ -1,7 +1,7 @@
 # CardPilot - NFC Data Collection App
 
 **当前版本**: 1.1  
-**最后更新**: 2024年12月19日
+**最后更新**: 2025年8月11日
 
 CardPilot is an iOS app designed to automatically collect and record device data when triggered by NFC interactions through iOS Shortcuts. The app captures GPS location, IP address, IMU sensor data, and information about the triggering context.
 
@@ -57,18 +57,68 @@ To set up CardPilot with iOS Shortcuts for NFC triggering:
 
 ### 2. URL Scheme Integration
 
-CardPilot supports custom URL schemes for external triggering:
+CardPilot supports custom URL schemes for external triggering. The app uses the following URL format:
 
+#### 基本格式
 ```
-cardpilot://collect?sourceApp=YourAppName&autoExit=true&silent=true
+cardpilot://collect?[参数1=值1]&[参数2=值2]&...
 ```
 
-**完整URL参数说明：**
-- `sourceApp`: 触发应用的名称（如：Shortcuts, NFC等）
-- `autoExit`: 是否自动退出（true/false）
-- `silent`: 是否静默模式（true/false）
-- `ssid`: WiFi SSID（可选，从Shortcuts传入）
-- `nfc`: NFC UID（可选，从Shortcuts或NFC传入）
+#### 完整URL示例
+```
+cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=MyWiFi&nfc=123456789
+```
+
+#### 支持的URL参数
+
+| 参数名 | 类型 | 必需 | 说明 | 示例值 |
+|--------|------|------|------|--------|
+| `sourceApp` | String | 否 | 触发应用的名称 | `Shortcuts`, `NFC`, `Manual` |
+| `autoExit` | Boolean | 否 | 数据收集完成后是否自动退出应用 | `true`, `false` |
+| `silent` | Boolean | 否 | 是否启用静默模式（减少UI反馈） | `true`, `false` |
+| `ssid` | String | 否 | WiFi网络名称（通常从Shortcuts传入） | `MyWiFi`, `Office_5G` |
+| `nfc` | String | 否 | NFC标签UID或标识符 | `123456789`, `tag_001` |
+
+#### URL参数详细说明
+
+**sourceApp 参数**
+- 用于标识触发数据收集的应用或来源
+- 会显示在收集的数据中，便于后续分析
+- 常用值：`Shortcuts`（快捷指令）、`NFC`（NFC标签）、`Manual`（手动触发）
+
+**autoExit 参数**
+- 设置为 `true` 时，数据收集完成后应用会自动退出
+- 设置为 `false` 或不设置时，用户需要手动退出应用
+- 适用于自动化场景，减少用户干预
+
+**silent 参数**
+- 设置为 `true` 时，减少用户界面反馈和提示
+- 设置为 `false` 或不设置时，显示正常的用户界面
+- 适用于后台或自动化数据收集
+
+**ssid 参数**
+- 传入WiFi网络名称，用于记录当前网络环境
+- 由于iOS隐私限制，通常通过Shortcuts应用获取并传入
+- 如果未提供，应用会尝试获取网络连接状态
+
+**nfc 参数**
+- 传入NFC标签的UID或自定义标识符
+- 用于关联特定的NFC标签和使用场景
+- 便于后续数据分析和标签管理
+
+#### 最小化URL示例
+
+如果只需要基本的数据收集，可以使用最简单的URL：
+```
+cardpilot://collect
+```
+
+#### 自动化场景URL示例
+
+适用于Shortcuts自动化的URL：
+```
+cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true
+```
 
 ### 3. Manual Testing
 
@@ -130,10 +180,31 @@ Each NFC session records:
 4. View collected data in the app interface
 
 ### URL Scheme Trigger
+
+#### 在iOS Shortcuts中使用
+在Shortcuts应用中，添加"Open URL"动作：
+```
+cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&nfc=[NFC_UID]
+```
+
+#### 在其他应用中编程调用
 ```swift
-if let url = URL(string: "cardpilot://collect?sourceApp=MyApp&autoExit=true&silent=true") {
+// 基本调用
+if let url = URL(string: "cardpilot://collect") {
     UIApplication.shared.open(url)
 }
+
+// 带参数调用
+let urlString = "cardpilot://collect?sourceApp=MyApp&autoExit=true&silent=true&ssid=\(wifiSSID)&nfc=\(nfcUID)"
+if let url = URL(string: urlString) {
+    UIApplication.shared.open(url)
+}
+```
+
+#### Safari中测试
+你也可以在Safari中直接输入URL来测试：
+```
+cardpilot://collect?sourceApp=Safari&autoExit=false
 ```
 
 ### Manual Trigger
