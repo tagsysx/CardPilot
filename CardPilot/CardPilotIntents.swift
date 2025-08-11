@@ -79,9 +79,10 @@ struct CollectDataIntent: AppIntent {
         sessionData.administrativeArea = state.isEmpty ? nil : state
         sessionData.subLocality = city.isEmpty ? nil : city
         
-        // Note: We don't collect GPS coordinates since we have address from Shortcuts
-        sessionData.latitude = nil
-        sessionData.longitude = nil
+        print("📍 Collecting GPS coordinates...")
+        let locationData = try await collectLocationDataInBackground()
+        sessionData.latitude = locationData.latitude
+        sessionData.longitude = locationData.longitude
         
         print("🌐 Using WiFi data from Shortcuts parameters...")
         let networkData = try await collectNetworkDataInBackground()
@@ -111,6 +112,62 @@ struct CollectDataIntent: AppIntent {
         sessionData.screenBrightness = 0
         
         return sessionData
+    }
+    
+    // MARK: - Location Data Collection
+    
+    private func collectLocationDataInBackground() async throws -> (latitude: Double?, longitude: Double?) {
+        let locationManager = CLLocationManager()
+        
+        // Request location permission
+        let authStatus = CLLocationManager.authorizationStatus()
+        guard authStatus == .authorizedWhenInUse || authStatus == .authorizedAlways else {
+            print("⚠️ Location permission not granted")
+            return (nil, nil)
+        }
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let manager = CLLocationManager()
+            manager.desiredAccuracy = kCLLocationAccuracyBest
+            manager.requestLocation()
+            
+            var hasReceivedLocation = false
+            
+            let locationHandler: (CLLocation?, Error?) -> Void = { location, error in
+                guard !hasReceivedLocation else { return }
+                hasReceivedLocation = true
+                
+                if let error = error {
+                    print("❌ Location error: \(error)")
+                    continuation.resume(returning: (nil, nil))
+                    return
+                }
+                
+                guard let location = location else {
+                    print("⚠️ No location data received")
+                    continuation.resume(returning: (nil, nil))
+                    return
+                }
+                
+                print("✅ GPS coordinates collected: \(location.coordinate.latitude), \(location.coordinate.longitude)")
+                continuation.resume(returning: (
+                    location.coordinate.latitude,
+                    location.coordinate.longitude
+                ))
+            }
+            
+            // Set up location manager
+            manager.delegate = LocationDelegate(completion: locationHandler)
+            
+            // Timeout after 10 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                if !hasReceivedLocation {
+                    hasReceivedLocation = true
+                    print("⚠️ Location timeout")
+                    continuation.resume(returning: (nil, nil))
+                }
+            }
+        }
     }
     
     // MARK: - Network Data Collection
@@ -444,6 +501,24 @@ struct CollectDataIntent: AppIntent {
         let physicalMemory = processInfo.physicalMemory
         let memoryUsage = Double(processInfo.physicalMemory - processInfo.physicalMemory) / Double(physicalMemory)
         return min(max(memoryUsage, 0.0), 1.0) * 100.0
+    }
+}
+
+// MARK: - Location Manager Delegate
+
+class LocationDelegate: NSObject, CLLocationManagerDelegate {
+    private let completion: (CLLocation?, Error?) -> Void
+    
+    init(completion: @escaping (CLLocation?, Error?) -> Void) {
+        self.completion = completion
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        completion(locations.first, nil)
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        completion(nil, error)
     }
 }
 
