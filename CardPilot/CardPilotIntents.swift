@@ -123,13 +123,9 @@ struct CollectDataIntent: AppIntent {
         }
         
         return try await withCheckedThrowingContinuation { continuation in
-            let manager = CLLocationManager()
-            manager.desiredAccuracy = kCLLocationAccuracyBest
-            manager.requestLocation()
-            
             var hasReceivedLocation = false
             
-            let locationHandler: (CLLocation?, Error?) -> Void = { location, error in
+            let locationDelegate = LocationDelegate(completion: { location, error in
                 guard !hasReceivedLocation else { return }
                 hasReceivedLocation = true
                 
@@ -150,10 +146,12 @@ struct CollectDataIntent: AppIntent {
                     location.coordinate.latitude,
                     location.coordinate.longitude
                 ))
-            }
+            })
             
             // Set up location manager
-            manager.delegate = LocationDelegate(completion: locationHandler)
+            locationManager.delegate = locationDelegate
+            locationManager.desiredAccuracy = kCLLocationAccuracyBest
+            locationManager.requestLocation()
             
             // Timeout after 10 seconds
             DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
