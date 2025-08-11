@@ -6,6 +6,7 @@ import SystemConfiguration
 import Network
 import SwiftData
 import UIKit
+import Darwin
 
 struct CollectDataIntent: AppIntent {
     static var title: LocalizedStringResource = "Collect Sensor Data"
@@ -87,6 +88,7 @@ struct CollectDataIntent: AppIntent {
         sessionData.timestamp = Date()
         print("✅ Session data initialized with timestamp: \(sessionData.timestamp)")
         
+        // 使用do-catch包装每个数据收集步骤，确保单个失败不影响整体
         print("🔧 Step 2.1: Setting GPS coordinates...")
         print("📍 Using GPS coordinates from Shortcuts parameters...")
         sessionData.latitude = latitude
@@ -97,15 +99,27 @@ struct CollectDataIntent: AppIntent {
         if latitude != 0.0 && longitude != 0.0 {
             print("🔧 Step 2.2: Parsing address from GPS coordinates...")
             print("🏠 Parsing address from GPS coordinates...")
-            let addressInfo = try await parseAddressFromCoordinates(latitude: latitude, longitude: longitude)
-            sessionData.street = addressInfo.street
-            sessionData.city = addressInfo.city
-            sessionData.state = addressInfo.state
-            sessionData.country = addressInfo.country
-            sessionData.postalCode = addressInfo.postalCode
-            sessionData.administrativeArea = addressInfo.state
-            sessionData.subLocality = addressInfo.city
-            print("✅ Address parsing completed: \(addressInfo.city ?? "Unknown"), \(addressInfo.state ?? "Unknown")")
+            do {
+                let addressInfo = try await parseAddressFromCoordinates(latitude: latitude, longitude: longitude)
+                sessionData.street = addressInfo.street
+                sessionData.city = addressInfo.city
+                sessionData.state = addressInfo.state
+                sessionData.country = addressInfo.country
+                sessionData.postalCode = addressInfo.postalCode
+                sessionData.administrativeArea = addressInfo.state
+                sessionData.subLocality = addressInfo.city
+                print("✅ Address parsing completed: \(addressInfo.city ?? "Unknown"), \(addressInfo.state ?? "Unknown")")
+            } catch {
+                print("⚠️ Address parsing failed: \(error), continuing with other data collection")
+                // 地址解析失败不影响其他数据收集
+                sessionData.street = nil
+                sessionData.city = nil
+                sessionData.state = nil
+                sessionData.country = nil
+                sessionData.postalCode = nil
+                sessionData.administrativeArea = nil
+                sessionData.subLocality = nil
+            }
         } else {
             print("⚠️ No GPS coordinates provided from Shortcuts, address fields will be nil")
             sessionData.street = nil
@@ -119,43 +133,63 @@ struct CollectDataIntent: AppIntent {
         
         print("🔧 Step 2.3: Collecting network data...")
         print("🌐 Using WiFi data from Shortcuts parameters...")
-        let networkData = try await collectNetworkDataInBackground()
-        sessionData.ipAddress = networkData.ipAddress
-        sessionData.wifiSSID = networkData.wifiSSID
-        print("✅ Network data collected: IP: \(networkData.ipAddress ?? "Unknown"), WiFi: \(networkData.wifiSSID ?? "Unknown")")
+        do {
+            let networkData = try await collectNetworkDataInBackground()
+            sessionData.ipAddress = networkData.ipAddress
+            sessionData.wifiSSID = networkData.wifiSSID
+            print("✅ Network data collected: IP: \(networkData.ipAddress ?? "Unknown"), WiFi: \(networkData.wifiSSID ?? "Unknown")")
+        } catch {
+            print("⚠️ Network data collection failed: \(error), using fallback values")
+            // 网络数据收集失败时使用备选值
+            sessionData.ipAddress = "Network Error"
+            sessionData.wifiSSID = wifi.isEmpty ? "Unknown" : wifi
+        }
         
         print("🔧 Step 2.4: Collecting sensor data...")
         print("📱 Collecting sensor data...")
-        let sensorData = try await collectSensorDataInBackground()
-        print("✅ Sensor data collection started...")
-        
-        sessionData.magnetometerData = sensorData.magnetometerData
-        sessionData.barometerData = sensorData.barometerData
-        sessionData.ambientLightData = sensorData.ambientLightData
-        sessionData.proximityData = sensorData.proximityData
-        sessionData.pedometerData = sensorData.pedometerData
-        sessionData.temperatureData = sensorData.temperatureData
-        sessionData.imuData = sensorData.imuData  // Store IMU data
-        print("✅ Sensor data assigned to session")
+        do {
+            let sensorData = try await collectSensorDataInBackground()
+            sessionData.magnetometerData = sensorData.magnetometerData
+            sessionData.barometerData = sensorData.barometerData
+            sessionData.ambientLightData = sensorData.ambientLightData
+            sessionData.proximityData = sensorData.proximityData
+            sessionData.pedometerData = sensorData.pedometerData
+            sessionData.temperatureData = sensorData.temperatureData
+            sessionData.imuData = sensorData.imuData
+            print("✅ Sensor data assigned to session")
+        } catch {
+            print("⚠️ Sensor data collection failed: \(error), continuing with basic data")
+            // 传感器数据收集失败时设置为nil，不影响基本功能
+            sessionData.magnetometerData = nil
+            sessionData.barometerData = nil
+            sessionData.ambientLightData = nil
+            sessionData.proximityData = nil
+            sessionData.pedometerData = nil
+            sessionData.temperatureData = nil
+            sessionData.imuData = nil
+        }
         
         // Note: batteryData and systemResourceData are not stored in NFCSessionData model
         // They are collected but not persisted to avoid model changes
         
-        print("🔧 Step 2.5: Setting metadata...")
+        print("🔧 Step 2.5: Collecting screen state data...")
+        let screenData = collectScreenStateData()
+        sessionData.screenState = screenData.state
+        sessionData.screenBrightness = screenData.brightness
+        sessionData.screenStateHistory = screenData.history
+        print("✅ Screen state data collected")
+        
+        print("🔧 Step 2.6: Setting metadata...")
         sessionData.currentAppName = "Shortcuts App Intent"
         sessionData.nfcTagData = nfc
         sessionData.nfcUsageType = "shortcuts_triggered"
         sessionData.nfcTriggerSource = "app_intent"
         sessionData.nfcSessionDuration = 0
-        
-        // Screen state (simplified for background)
-        sessionData.screenState = "unknown"
-        sessionData.screenBrightness = 0
         print("✅ Metadata set successfully")
         
         // Add NFC usage record if NFC info is not empty
         if !nfc.isEmpty {
-            print("🔧 Step 2.6: Creating NFC usage record...")
+            print("🔧 Step 2.7: Creating NFC usage record...")
             let nfcUsageRecord = NFCUsageRecord(
                 timestamp: Date(),
                 triggerSource: "app_intent",
@@ -194,17 +228,31 @@ struct CollectDataIntent: AppIntent {
         let location = CLLocation(latitude: latitude, longitude: longitude)
         let geocoder = CLGeocoder()
         
+        // 检查网络连接状态
+        guard await isNetworkAvailable() else {
+            print("⚠️ No network connection available, skipping address parsing")
+            // 返回nil而不是抛出错误，这样应用不会崩溃
+            return (nil, nil, nil, nil, nil)
+        }
+        
         return try await withCheckedThrowingContinuation { continuation in
             geocoder.reverseGeocodeLocation(location) { placemarks, error in
                 if let error = error {
                     print("⚠️ Geocoding error: \(error)")
-                    continuation.resume(throwing: error)
+                    // 检查是否是网络相关错误
+                    if let clError = error as? CLError, clError.code == .network {
+                        print("⚠️ Network error during geocoding, returning nil for address fields")
+                        continuation.resume(returning: (nil, nil, nil, nil, nil))
+                    } else {
+                        print("⚠️ Other geocoding error, returning nil for address fields")
+                        continuation.resume(returning: (nil, nil, nil, nil, nil))
+                    }
                     return
                 }
                 
                 guard let placemark = placemarks?.first else {
                     print("⚠️ No placemark found for coordinates")
-                    continuation.resume(throwing: NSError(domain: "Geocoding", code: 0, userInfo: [NSLocalizedDescriptionKey: "No placemark found"]))
+                    continuation.resume(returning: (nil, nil, nil, nil, nil))
                     return
                 }
                 
@@ -218,6 +266,33 @@ struct CollectDataIntent: AppIntent {
                 
                 print("✅ Address parsed: \(addressInfo.street ?? "Unknown"), \(addressInfo.city ?? "Unknown"), \(addressInfo.state ?? "Unknown"), \(addressInfo.country ?? "Unknown")")
                 continuation.resume(returning: addressInfo)
+            }
+        }
+    }
+    
+    // MARK: - Network Availability Check
+    
+    private func isNetworkAvailable() async -> Bool {
+        // 使用Network框架检查网络连接状态
+        let monitor = NWPathMonitor()
+        let queue = DispatchQueue(label: "NetworkMonitor")
+        
+        return await withCheckedContinuation { continuation in
+            monitor.pathUpdateHandler = { path in
+                let isAvailable = path.status == .satisfied
+                print("🌐 Network status: \(isAvailable ? "Available" : "Unavailable")")
+                continuation.resume(returning: isAvailable)
+                monitor.cancel()
+            }
+            monitor.start(queue: queue)
+            
+            // 设置超时，避免无限等待
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if monitor.pathUpdateHandler != nil {
+                    print("⚠️ Network check timed out, assuming unavailable")
+                    continuation.resume(returning: false)
+                    monitor.cancel()
+                }
             }
         }
     }
@@ -241,10 +316,65 @@ struct CollectDataIntent: AppIntent {
     }
     
     private func getCurrentIPAddress() async throws -> String {
-        // Try to get public IP address
-        let url = URL(string: "https://api.ipify.org")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        return String(data: data, encoding: .utf8) ?? "Unknown"
+        // 首先检查网络连接
+        guard await isNetworkAvailable() else {
+            print("⚠️ No network connection available, returning local IP or fallback")
+            // 尝试获取本地IP地址作为备选
+            if let localIP = getLocalIPAddress() {
+                return localIP
+            }
+            return "No Network"
+        }
+        
+        // 尝试获取公网IP地址
+        do {
+            let url = URL(string: "https://api.ipify.org")!
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let publicIP = String(data: data, encoding: .utf8) ?? "Unknown"
+            print("✅ Public IP address obtained: \(publicIP)")
+            return publicIP
+        } catch {
+            print("⚠️ Failed to get public IP address: \(error), trying local IP")
+            // 如果获取公网IP失败，尝试本地IP
+            if let localIP = getLocalIPAddress() {
+                return localIP
+            }
+            return "Unknown"
+        }
+    }
+    
+    private func getLocalIPAddress() -> String? {
+        var address: String?
+        
+        // 获取本地机器上所有接口的列表
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0 else { return nil }
+        guard let firstAddr = ifaddr else { return nil }
+        
+        // 遍历每个接口
+        for ifptr in sequence(first: firstAddr, next: { $0.pointee.ifa_next }) {
+            let interface = ifptr.pointee
+            
+            // 检查IPv4或IPv6接口
+            let addrFamily = interface.ifa_addr.pointee.sa_family
+            if addrFamily == UInt8(AF_INET) || addrFamily == UInt8(AF_INET6) {
+                
+                // 检查接口名称
+                let name = String(cString: interface.ifa_name)
+                if name == "en0" || name == "pdp_ip0" { // WiFi或蜂窝网络
+                    
+                    // 将接口地址转换为人类可读的字符串
+                    var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                    getnameinfo(interface.ifa_addr, socklen_t(interface.ifa_addr.pointee.sa_len),
+                               &hostname, socklen_t(hostname.count),
+                               nil, socklen_t(0), NI_NUMERICHOST)
+                    address = String(cString: hostname)
+                    break
+                }
+            }
+        }
+        freeifaddrs(ifaddr)
+        return address
     }
     
     private func getWiFiSSIDFromSystem() -> String? {
@@ -252,17 +382,26 @@ struct CollectDataIntent: AppIntent {
         return "Simulator_WiFi"
         #else
         // Try to get WiFi SSID (limited on iOS 14+)
-        guard let interfaceNames = CNCopySupportedInterfaces() as? [String] else {
+        do {
+            guard let interfaceNames = CNCopySupportedInterfaces() as? [String] else {
+                print("⚠️ Failed to get supported interfaces")
+                return nil
+            }
+            
+            for interfaceName in interfaceNames {
+                if let networkInfo = CNCopyCurrentNetworkInfo(interfaceName as CFString) as? [String: Any],
+                   let ssid = networkInfo[kCNNetworkInfoKeySSID as String] as? String {
+                    print("✅ WiFi SSID obtained from system: \(ssid)")
+                    return ssid
+                }
+            }
+            
+            print("⚠️ No WiFi SSID found in system interfaces")
+            return nil
+        } catch {
+            print("⚠️ Error getting WiFi SSID from system: \(error)")
             return nil
         }
-        
-        for interfaceName in interfaceNames {
-            if let networkInfo = CNCopyCurrentNetworkInfo(interfaceName as CFString) as? [String: Any],
-               let ssid = networkInfo[kCNNetworkInfoKeySSID as String] as? String {
-                return ssid
-            }
-        }
-        return nil
         #endif
     }
     
@@ -274,14 +413,28 @@ struct CollectDataIntent: AppIntent {
         
         // Note: Individual sensor collection functions have their own timeouts
         
-        // Collect sensor data
+        // Collect sensor data with individual error handling
+        var magnetometerData: Data? = nil
+        var barometerData: Data? = nil
+        var imuData: Data? = nil
+        
         print("🔧 Collecting magnetometer data...")
-        let magnetometerData = try? await collectMagnetometerData()
-        print("✅ Magnetometer data: \(magnetometerData != nil ? "Collected" : "Not available")")
+        do {
+            magnetometerData = try await collectMagnetometerData()
+            print("✅ Magnetometer data: \(magnetometerData != nil ? "Collected" : "Not available")")
+        } catch {
+            print("⚠️ Magnetometer data collection failed: \(error)")
+            magnetometerData = nil
+        }
         
         print("🔧 Collecting barometer data...")
-        let barometerData = try? await collectBarometerData()
-        print("✅ Barometer data: \(barometerData != nil ? "Collected" : "Not available")")
+        do {
+            barometerData = try await collectBarometerData()
+            print("✅ Barometer data: \(barometerData != nil ? "Collected" : "Not available")")
+        } catch {
+            print("⚠️ Barometer data collection failed: \(error)")
+            barometerData = nil
+        }
         
         print("🔧 Collecting ambient light data...")
         let ambientLightData = collectAmbientLightData()
@@ -292,8 +445,13 @@ struct CollectDataIntent: AppIntent {
         print("✅ Proximity data: \(proximityData != nil ? "Collected" : "Not available")")
         
         print("🔧 Collecting IMU data...")
-        let imuData = try? await collectIMUData()
-        print("✅ IMU data: \(imuData != nil ? "Collected" : "Not available")")
+        do {
+            imuData = try await collectIMUData()
+            print("✅ IMU data: \(imuData != nil ? "Collected" : "Not available")")
+        } catch {
+            print("⚠️ IMU data collection failed: \(error)")
+            imuData = nil
+        }
         
         print("🔧 Collecting temperature data...")
         let temperatureData = collectTemperatureData()
@@ -305,7 +463,7 @@ struct CollectDataIntent: AppIntent {
         let batteryData: Data? = nil
         let systemResourceData: Data? = nil
         
-        print("✅ collectSensorDataInBackground: All sensor data collected successfully")
+        print("✅ collectSensorDataInBackground: Sensor data collection completed")
         
         return (
             magnetometerData,
@@ -463,24 +621,38 @@ struct CollectDataIntent: AppIntent {
     }
     
     private func collectAmbientLightData() -> Data? {
-        let brightness = UIScreen.main.brightness
-        let ambientLightData = AmbientLightData(
-            timestamp: Date().timeIntervalSince1970,
-            brightness: Double(brightness) * 1000
-        )
-        
-        return try? JSONEncoder().encode(ambientLightData)
+        do {
+            let brightness = UIScreen.main.brightness
+            let ambientLightData = AmbientLightData(
+                timestamp: Date().timeIntervalSince1970,
+                brightness: Double(brightness) * 1000
+            )
+            
+            let encodedData = try JSONEncoder().encode(ambientLightData)
+            print("✅ Ambient light data encoded successfully")
+            return encodedData
+        } catch {
+            print("⚠️ Failed to encode ambient light data: \(error)")
+            return nil
+        }
     }
     
     private func collectProximityData() -> Data? {
-        let isClose = UIDevice.current.proximityState
-        let proximityData = ProximityData(
-            timestamp: Date().timeIntervalSince1970,
-            distance: isClose ? 0.05 : nil,
-            isClose: isClose
-        )
-        
-        return try? JSONEncoder().encode(proximityData)
+        do {
+            let isClose = UIDevice.current.proximityState
+            let proximityData = ProximityData(
+                timestamp: Date().timeIntervalSince1970,
+                distance: isClose ? 0.05 : nil,
+                isClose: isClose
+            )
+            
+            let encodedData = try JSONEncoder().encode(proximityData)
+            print("✅ Proximity data encoded successfully")
+            return encodedData
+        } catch {
+            print("⚠️ Failed to encode proximity data: \(error)")
+            return nil
+        }
     }
     
     private func collectIMUData() async throws -> Data? {
@@ -601,25 +773,32 @@ struct CollectDataIntent: AppIntent {
     }
     
     private func collectTemperatureData() -> Data? {
-        let processInfo = ProcessInfo.processInfo
-        let thermalState = processInfo.thermalState
-        
-        var temperature: Double = 20.0
-        switch thermalState {
-        case .nominal: temperature = 20.0
-        case .fair: temperature = 25.0
-        case .serious: temperature = 30.0
-        case .critical: temperature = 35.0
-        @unknown default: temperature = 22.0
+        do {
+            let processInfo = ProcessInfo.processInfo
+            let thermalState = processInfo.thermalState
+            
+            var temperature: Double = 20.0
+            switch thermalState {
+            case .nominal: temperature = 20.0
+            case .fair: temperature = 25.0
+            case .serious: temperature = 30.0
+            case .critical: temperature = 35.0
+            @unknown default: temperature = 22.0
+            }
+            
+            let temperatureData = TemperatureData(
+                timestamp: Date().timeIntervalSince1970,
+                temperature: temperature,
+                humidity: 50.0
+            )
+            
+            let encodedData = try JSONEncoder().encode(temperatureData)
+            print("✅ Temperature data encoded successfully")
+            return encodedData
+        } catch {
+            print("⚠️ Failed to encode temperature data: \(error)")
+            return nil
         }
-        
-        let temperatureData = TemperatureData(
-            timestamp: Date().timeIntervalSince1970,
-            temperature: temperature,
-            humidity: 50.0
-        )
-        
-        return try? JSONEncoder().encode(temperatureData)
     }
     
     // MARK: - Device Data Collection
@@ -627,6 +806,29 @@ struct CollectDataIntent: AppIntent {
     private func collectDeviceDataInBackground() async throws -> Void {
         // Additional device-specific data collection if needed
         return
+    }
+    
+    // MARK: - Screen State Data Collection
+    
+    private func collectScreenStateData() -> (state: String, brightness: Double, history: Data?) {
+        // 获取当前屏幕状态
+        let currentBrightness = UIScreen.main.brightness
+        let currentState = currentBrightness > 0 ? "on" : "off"
+        
+        // 创建屏幕状态历史记录
+        let screenStateEvent = ScreenStateEvent(
+            timestamp: Date(),
+            isScreenOn: currentBrightness > 0,
+            reason: "App Intent triggered",
+            brightness: currentBrightness
+        )
+        
+        // 编码为Data
+        let historyData = try? JSONEncoder().encode([screenStateEvent])
+        
+        print("✅ Screen state collected: \(currentState), brightness: \(currentBrightness)")
+        
+        return (currentState, currentBrightness, historyData)
     }
     
     // MARK: - App Shortcuts Provider

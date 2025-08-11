@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 文件访问权限 -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	
+	<!-- 文档文件夹访问权限 -->
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+	
+	<!-- 文档文件夹访问权限 -->
+	<key>com.apple.security.files.documents.read-write</key>
+	<true/>
+	
+	<!-- 支持文件共享 -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	
+	<!-- 网络访问权限 -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	
+	<!-- 位置服务权限 -->
+	<key>com.apple.security.device.location</key>
+	<true/>
+	
+	<!-- 麦克风权限 -->
+	<key>com.apple.security.device.microphone</key>
+	<true/>
+	
+	<!-- 蓝牙权限 -->
+	<key>com.apple.security.device.bluetooth</key>
+	<true/>
+	
+	<!-- 运动传感器权限 -->
+	<key>com.apple.security.device.motion</key>
+	<true/>
+</dict>
+</plist>

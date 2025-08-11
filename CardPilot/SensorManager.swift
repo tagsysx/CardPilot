@@ -428,6 +428,9 @@ class SensorManager: ObservableObject {
     
     // MARK: - 批量数据收集
     func collectAllSensorData(for location: CLLocation? = nil, skipMicrophone: Bool = false) async {
+        // 检查是否为 App Intent 模式
+        let isAppIntentMode = UserDefaults.standard.bool(forKey: "isAppIntentMode")
+        
         // 收集所有可用的传感器数据
         getAmbientLightData()
         getProximityData()
@@ -435,7 +438,22 @@ class SensorManager: ObservableObject {
         getTemperatureData()
         getDeviceOrientationData()
         getBatteryData()
-        getNetworkData()
+        
+        // 在 App Intent 模式下跳过网络数据收集，避免触发位置权限检查
+        if isAppIntentMode {
+            print("📱 App Intent mode: Skipping network data collection to avoid location permission check")
+            // 设置空的网络数据
+            networkData = NetworkData(
+                timestamp: Date().timeIntervalSince1970,
+                connectionType: "App_Intent_Mode",
+                isConnected: true,
+                connectionQuality: "Unknown",
+                wifiSSID: "App_Intent_Mode"
+            )
+        } else {
+            getNetworkData()
+        }
+        
         getSystemResourceData()
         
         if !skipMicrophone {
@@ -526,17 +544,24 @@ private func getConnectionQuality() -> String {
 }
 
 private func getWiFiSSID() -> String? {
-    // 1. 优先使用从Shortcuts传入的外部SSID
+    // 1. 优先使用外部传入的SSID
     if let externalSSID = WiFiSSIDManager.shared.getValidSSID() {
         return externalSSID
     }
     
-    // 2. 模拟器环境返回模拟数据
+    // 2. 检查是否为 App Intent 模式
+    let isAppIntentMode = UserDefaults.standard.bool(forKey: "isAppIntentMode")
+    if isAppIntentMode {
+        print("📱 App Intent mode: Skipping WiFi SSID collection to avoid location permission check")
+        return "App_Intent_Mode"
+    }
+    
+    // 3. 模拟器环境返回模拟数据
     #if targetEnvironment(simulator)
     return "Simulator_WiFi_Network"
     #else
     
-    // 3. 真机环境：尝试获取系统SSID
+    // 4. 真机环境：尝试获取系统SSID
     let locationStatus = CLLocationManager.authorizationStatus()
     
     if locationStatus == .authorizedWhenInUse || locationStatus == .authorizedAlways {
@@ -545,7 +570,7 @@ private func getWiFiSSID() -> String? {
         }
     }
     
-    // 4. 最后的Fallback: 返回连接状态
+    // 5. 最后的Fallback: 返回连接状态
     return getDetailedWiFiStatus()
     #endif
 }

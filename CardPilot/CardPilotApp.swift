@@ -11,6 +11,8 @@ import AppIntents
 
 @main
 struct CardPilotApp: App {
+    @StateObject private var dataPersistenceManager = DataPersistenceManager.shared
+    
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Item.self,
@@ -44,7 +46,41 @@ struct CardPilotApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onAppear {
+                    // 应用启动时尝试恢复数据
+                    restoreDataIfNeeded()
+                }
         }
         .modelContainer(sharedModelContainer)
+    }
+    
+    // MARK: - 数据恢复
+    
+    private func restoreDataIfNeeded() {
+        // 检查是否有备份数据需要恢复
+        let backupStatus = dataPersistenceManager.getBackupStatus()
+        
+        if backupStatus.mainFileExists {
+            print("📁 Found backup file, attempting to restore data...")
+            
+            // 在后台线程中恢复数据
+            Task {
+                let restoreSuccess = await dataPersistenceManager.restoreDataFromFile()
+                
+                if restoreSuccess {
+                    print("✅ Successfully restored data from backup")
+                    
+                    // 在主线程中更新UI
+                    await MainActor.run {
+                        // 这里可以添加恢复成功的通知
+                        print("📱 Data restoration completed on main thread")
+                    }
+                } else {
+                    print("❌ Failed to restore data from backup")
+                }
+            }
+        } else {
+            print("📁 No backup file found, using existing SwiftData storage")
+        }
     }
 }

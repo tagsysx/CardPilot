@@ -97,12 +97,22 @@ class NFCUsageTracker: ObservableObject {
         
         let startTime = Date()
         
-        // 并发收集数据
-        async let locationTask = locationManager.getCurrentLocation()
+        // 检查是否为 App Intent 模式
+        let isAppIntentMode = UserDefaults.standard.bool(forKey: "isAppIntentMode")
+        
+        // 并发收集数据（在 App Intent 模式下跳过位置获取）
+        let locationTask: Task<CLLocation?, Never>
+        if isAppIntentMode {
+            print("📱 App Intent mode: Skipping location collection in NFC usage tracking")
+            locationTask = Task { nil }
+        } else {
+            locationTask = Task { await locationManager.getCurrentLocation() }
+        }
+        
         async let ipTask = networkManager.getCurrentIPAddress()
         async let motionTask = captureQuickMotionSnapshot()
         
-        let (location, ipAddress, motionData) = await (locationTask, ipTask, motionTask)
+        let (location, ipAddress, motionData) = await (locationTask.value, ipTask, motionTask)
         
         let endTime = Date()
         let sessionDuration = endTime.timeIntervalSince(startTime)

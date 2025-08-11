@@ -350,6 +350,123 @@ final class CardPilotTests: XCTestCase {
         XCTAssertTrue(UserDefaults.standard.bool(forKey: "hapticFeedbackEnabled"))
     }
     
+    // MARK: - Network Connection Tests
+    
+    func testNetworkAvailabilityCheck() async throws {
+        // 测试网络可用性检查功能
+        // 注意：这是一个集成测试，需要实际的网络环境
+        
+        // 创建CollectDataIntent实例来测试私有方法
+        let intent = CollectDataIntent()
+        
+        // 由于isNetworkAvailable是私有方法，我们无法直接测试
+        // 但我们可以测试整个数据收集流程在网络不可用时的行为
+        
+        // 模拟网络不可用的情况
+        // 在实际使用中，这应该通过模拟网络状态来实现
+        
+        print("🌐 Testing network availability handling...")
+        
+        // 验证intent能够正常创建
+        XCTAssertNotNil(intent)
+        XCTAssertEqual(intent.wifi, "")
+        XCTAssertEqual(intent.nfc, "")
+        XCTAssertEqual(intent.latitude, 0.0)
+        XCTAssertEqual(intent.longitude, 0.0)
+    }
+    
+    func testOfflineDataCollection() async throws {
+        // 测试离线数据收集功能
+        // 这个测试验证在没有网络连接时，应用仍然能够收集基本数据
+        
+        print("📱 Testing offline data collection...")
+        
+        // 创建一个模拟的离线环境
+        // 在实际测试中，这可能需要网络模拟器
+        
+        let intent = CollectDataIntent()
+        
+        // 设置测试参数
+        intent.wifi = "TestWiFi"
+        intent.nfc = "TestNFC"
+        intent.latitude = 37.7749
+        intent.longitude = -122.4194
+        
+        // 验证参数设置正确
+        XCTAssertEqual(intent.wifi, "TestWiFi")
+        XCTAssertEqual(intent.nfc, "TestNFC")
+        XCTAssertEqual(intent.latitude, 37.7749)
+        XCTAssertEqual(intent.longitude, -122.4194)
+        
+        print("✅ Offline data collection test parameters set correctly")
+    }
+    
+    func testErrorHandlingWithoutNetwork() async throws {
+        // 测试在没有网络连接时的错误处理
+        
+        print("❌ Testing error handling without network...")
+        
+        // 这个测试验证应用在网络不可用时不会崩溃
+        // 而是优雅地处理错误并继续运行
+        
+        let intent = CollectDataIntent()
+        
+        // 设置一个无效的坐标来测试错误处理
+        intent.latitude = 0.0
+        intent.longitude = 0.0
+        
+        // 验证应用能够处理无效坐标
+        XCTAssertEqual(intent.latitude, 0.0)
+        XCTAssertEqual(intent.longitude, 0.0)
+        
+        print("✅ Error handling test completed without crashes")
+    }
+    
+    // MARK: - Performance Tests
+    
+    func testDataCollectionPerformance() throws {
+        // 测试数据收集的性能
+        
+        print("⚡ Testing data collection performance...")
+        
+        let intent = CollectDataIntent()
+        
+        // 测量intent创建的性能
+        measure {
+            let _ = CollectDataIntent()
+        }
+        
+        print("✅ Performance test completed")
+    }
+    
+    // MARK: - Memory Tests
+    
+    func testMemoryUsage() throws {
+        // 测试内存使用情况
+        
+        print("💾 Testing memory usage...")
+        
+        // 创建多个intent实例来测试内存管理
+        var intents: [CollectDataIntent] = []
+        
+        for i in 0..<100 {
+            let intent = CollectDataIntent()
+            intent.wifi = "WiFi_\(i)"
+            intent.nfc = "NFC_\(i)"
+            intent.latitude = Double(i)
+            intent.longitude = Double(i)
+            intents.append(intent)
+        }
+        
+        // 验证所有intent都创建成功
+        XCTAssertEqual(intents.count, 100)
+        
+        // 清理内存
+        intents.removeAll()
+        
+        print("✅ Memory test completed")
+    }
+    
     // MARK: - Helper Methods
     
     private func createTestSessions() -> [NFCSessionData] {

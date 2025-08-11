@@ -64,6 +64,63 @@
 	<key>com.apple.developer.networking.wifi-info</key>
 	<true/>
 	
+	<!-- 文件访问权限 - 备份功能必需 -->
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>需要访问文档文件夹来保存和备份数据</string>
+	
+	<!-- 文档共享权限 - 允许在Files应用中显示 -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	
+	<!-- 支持在文档中打开文件 -->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	
+	<!-- 支持文档类型 -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>CardPilot Data File</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.json</string>
+				<string>public.text</string>
+			</array>
+		</dict>
+	</array>
+	
+	<!-- 支持的文件类型 -->
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.cardpilot.data</string>
+			<key>UTTypeDescription</key>
+			<string>CardPilot Data File</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>json</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/json</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>com.yourcompany.CardPilot.CollectDataIntent</string>

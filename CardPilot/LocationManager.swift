@@ -104,8 +104,7 @@ class LocationManager: NSObject, ObservableObject {
         print("Requesting location...")
         
         // 在 App Intent 模式下不启动位置更新
-        if isAppIntentMode {
-            print("📱 App Intent mode: Location request not processed")
+        if shouldSkipLocationOperation(operation: "requestLocation") {
             completion(nil)
             return
         }
@@ -150,8 +149,7 @@ class LocationManager: NSObject, ObservableObject {
         print("🔄 Getting current location asynchronously...")
         
         // 在 App Intent 模式下不启动位置更新
-        if isAppIntentMode {
-            print("📱 App Intent mode: Location request not processed")
+        if shouldSkipLocationOperation(operation: "getCurrentLocation") {
             return nil
         }
         
@@ -190,8 +188,7 @@ class LocationManager: NSObject, ObservableObject {
         print("🔄 Starting location updates...")
         
         // 在 App Intent 模式下不启动位置更新
-        if isAppIntentMode {
-            print("📱 App Intent mode: Location updates not started")
+        if shouldSkipLocationOperation(operation: "startLocationUpdates") {
             return
         }
         
@@ -203,19 +200,18 @@ class LocationManager: NSObject, ObservableObject {
         
         // 检查权限状态
         guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
-            print("❌ Cannot start location updates: Authorization not granted")
+            print("❌ Cannot start location updates: Location authorization not granted")
             return
         }
         
-        // 防止重复启动
-        guard !isLocationUpdateActive else {
-            print("ℹ️ Location updates already active")
-            return
-        }
+        // 更新位置精度设置
+        updateLocationAccuracy()
         
-        isLocationUpdateActive = true
+        // 开始位置更新
         locationManager.startUpdatingLocation()
-        print("✅ Location updates started")
+        isLocationUpdateActive = true
+        
+        print("✅ Location updates started successfully")
     }
     
     func stopLocationUpdates() {
@@ -246,6 +242,11 @@ class LocationManager: NSObject, ObservableObject {
     // 获取位置（优先真实位置，模拟器环境使用默认位置）
     func getLocationWithFallback() async -> CLLocation? {
         print("🔄 Attempting to get location with fallback...")
+        
+        // 在 App Intent 模式下跳过位置获取
+        if shouldSkipLocationOperation(operation: "getLocationWithFallback") {
+            return nil
+        }
         
         // 检查位置服务状态
         guard locationServicesEnabled else {
@@ -310,8 +311,19 @@ class LocationManager: NSObject, ObservableObject {
         print("🔄 Getting current location with details...")
         
         // 在 App Intent 模式下不启动位置更新
-        if isAppIntentMode {
-            print("📱 App Intent mode: Location request not processed")
+        if shouldSkipLocationOperation(operation: "getCurrentLocationWithDetails") {
+            return (nil, DetailedLocationInfo())
+        }
+        
+        // 检查位置服务状态
+        guard locationServicesEnabled else {
+            print("❌ Location services are disabled")
+            return (nil, DetailedLocationInfo())
+        }
+        
+        // 检查权限状态
+        guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
+            print("❌ Location authorization not granted: \(authorizationStatus.rawValue)")
             return (nil, DetailedLocationInfo())
         }
         
@@ -329,6 +341,11 @@ class LocationManager: NSObject, ObservableObject {
     // 强制刷新位置
     func forceLocationRefresh() async -> CLLocation? {
         print("🔄 Force refreshing location...")
+        
+        // 在 App Intent 模式下跳过位置刷新
+        if shouldSkipLocationOperation(operation: "forceLocationRefresh") {
+            return nil
+        }
         
         // 停止当前更新
         stopLocationUpdates()
@@ -358,7 +375,8 @@ class LocationManager: NSObject, ObservableObject {
         }
     }
     
-    private var isAppIntentMode: Bool {
+    /// 检查当前是否为 App Intent 模式
+    var isAppIntentMode: Bool {
         get {
             return UserDefaults.standard.bool(forKey: "isAppIntentMode")
         }
@@ -367,7 +385,61 @@ class LocationManager: NSObject, ObservableObject {
         }
     }
     
+    /// 在 App Intent 模式下跳过位置操作的辅助方法
+    private func shouldSkipLocationOperation(operation: String) -> Bool {
+        if isAppIntentMode {
+            print("📱 App Intent mode: Skipping location operation: \(operation)")
+            return true
+        }
+        return false
+    }
+    
     // MARK: - Location Permission Management
+    
+    // MARK: - Public Methods
+    
+    /// Manually request location permission - useful for user-initiated permission requests
+    func manuallyRequestLocationPermission() {
+        print("🔧 Manual location permission request initiated")
+        
+        // Check current status first
+        let currentStatus = locationManager.authorizationStatus
+        print("Current authorization status: \(currentStatus.rawValue)")
+        
+        switch currentStatus {
+        case .notDetermined:
+            print("Requesting when in use authorization...")
+            locationManager.requestWhenInUseAuthorization()
+        case .denied, .restricted:
+            print("❌ Location permission denied or restricted")
+            // Provide user guidance
+            locationError = "Location access denied. Please enable in Settings → CardPilot → Location"
+        case .authorizedWhenInUse, .authorizedAlways:
+            print("✅ Location permission already granted")
+            startLocationUpdates()
+        @unknown default:
+            print("Unknown authorization status: \(currentStatus)")
+            locationManager.requestWhenInUseAuthorization()
+        }
+    }
+    
+    /// Check if location permission is available and provide user guidance
+    func checkLocationPermissionStatus() -> (isAvailable: Bool, userMessage: String?) {
+        let currentStatus = locationManager.authorizationStatus
+        
+        switch currentStatus {
+        case .notDetermined:
+            return (false, "Location permission not determined. Please grant permission when prompted.")
+        case .denied:
+            return (false, "Location access denied. Go to Settings → CardPilot → Location → While Using App")
+        case .restricted:
+            return (false, "Location access restricted by parental controls or device policy.")
+        case .authorizedWhenInUse, .authorizedAlways:
+            return (true, nil)
+        @unknown default:
+            return (false, "Unknown location permission status.")
+        }
+    }
 }
 
 // 宏观地点信息数据结构
@@ -449,11 +521,18 @@ extension LocationManager: CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         print("❌ Location manager failed with error: \(error.localizedDescription)")
         
+        // 添加调试信息
+        print("🔍 Debug: Current App Intent mode: \(isAppIntentMode)")
+        print("🔍 Debug: Location services enabled: \(locationServicesEnabled)")
+        print("🔍 Debug: Authorization status: \(authorizationStatus.rawValue)")
+        print("🔍 Debug: Is location update active: \(isLocationUpdateActive)")
+        
         // 处理特定错误类型
         if let clError = error as? CLError {
             switch clError.code {
             case .denied:
                 print("❌ Location access denied by user")
+                print("🔍 Debug: This error occurs when user denies location permission")
             case .locationUnknown:
                 print("⚠️ Location temporarily unavailable")
             case .network:
@@ -482,6 +561,12 @@ extension LocationManager: CLLocationManagerDelegate {
         
         // 重新检查位置服务状态
         checkLocationServicesStatus()
+        
+        // 在 App Intent 模式下跳过自动位置更新
+        if isAppIntentMode {
+            print("📱 App Intent mode: Skipping automatic location updates after authorization change")
+            return
+        }
         
         // 根据权限状态调整位置更新
         switch authorizationStatus {
