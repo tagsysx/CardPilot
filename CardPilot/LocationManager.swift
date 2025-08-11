@@ -11,12 +11,18 @@ import Combine
 
 class LocationManager: NSObject, ObservableObject {
     private let locationManager = CLLocationManager()
-    @Published var location: CLLocation?
-    @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
-    @Published var locationServicesEnabled: Bool = false
     
+    // MARK: - Published Properties
+    @Published var location: CLLocation?
+    @Published var lastKnownLocation: CLLocation?
+    @Published var locationServicesEnabled: Bool = false
+    @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
+    @Published var isLocationUpdateActive: Bool = false
+    @Published var locationAccuracy: CLLocationAccuracy = 0.0
+    @Published var locationError: String?
+    
+    // MARK: - Private Properties
     private var locationCompletion: ((CLLocation?) -> Void)?
-    private var isLocationUpdateActive = false
     
     override init() {
         super.init()
@@ -26,10 +32,12 @@ class LocationManager: NSObject, ObservableObject {
         // 检查位置服务状态
         checkLocationServicesStatus()
         
-        // 在真机环境中，应用启动后自动开始位置更新
+        // 在真机环境中，应用启动后自动开始位置更新（仅在非 App Intent 模式下）
         #if !targetEnvironment(simulator)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            self?.requestLocationPermission()
+            if !(self?.isAppIntentMode ?? false) {
+                self?.requestLocationPermission()
+            }
         }
         #endif
     }
@@ -80,7 +88,12 @@ class LocationManager: NSObject, ObservableObject {
             // 可以在这里提示用户去设置中开启权限
         case .authorizedWhenInUse, .authorizedAlways:
             print("✅ Location permission already granted")
-            startLocationUpdates()
+            // 仅在非 App Intent 模式下启动位置更新
+            if !isAppIntentMode {
+                startLocationUpdates()
+            } else {
+                print("📱 App Intent mode: Skipping automatic location updates")
+            }
         @unknown default:
             print("Unknown authorization status: \(currentStatus)")
             locationManager.requestWhenInUseAuthorization()
@@ -89,6 +102,13 @@ class LocationManager: NSObject, ObservableObject {
     
     func requestLocation(completion: @escaping (CLLocation?) -> Void) {
         print("Requesting location...")
+        
+        // 在 App Intent 模式下不启动位置更新
+        if isAppIntentMode {
+            print("📱 App Intent mode: Location request not processed")
+            completion(nil)
+            return
+        }
         
         // 检查位置服务是否开启
         guard locationServicesEnabled else {
@@ -129,6 +149,12 @@ class LocationManager: NSObject, ObservableObject {
     func getCurrentLocation() async -> CLLocation? {
         print("🔄 Getting current location asynchronously...")
         
+        // 在 App Intent 模式下不启动位置更新
+        if isAppIntentMode {
+            print("📱 App Intent mode: Location request not processed")
+            return nil
+        }
+        
         return await withCheckedContinuation { continuation in
             // 使用标志位防止多次恢复continuation
             var hasResumed = false
@@ -163,6 +189,12 @@ class LocationManager: NSObject, ObservableObject {
     func startLocationUpdates() {
         print("🔄 Starting location updates...")
         
+        // 在 App Intent 模式下不启动位置更新
+        if isAppIntentMode {
+            print("📱 App Intent mode: Location updates not started")
+            return
+        }
+        
         // 检查位置服务状态
         guard locationServicesEnabled else {
             print("❌ Cannot start location updates: Location services disabled")
@@ -196,11 +228,6 @@ class LocationManager: NSObject, ObservableObject {
     // 检查位置服务状态
     var isLocationServiceActive: Bool {
         return locationManager.location != nil && isLocationUpdateActive
-    }
-    
-    // 获取最后已知位置
-    var lastKnownLocation: CLLocation? {
-        return locationManager.location
     }
     
     // 添加模拟器位置支持
@@ -282,6 +309,12 @@ class LocationManager: NSObject, ObservableObject {
     func getCurrentLocationWithDetails() async -> (location: CLLocation?, details: DetailedLocationInfo) {
         print("🔄 Getting current location with details...")
         
+        // 在 App Intent 模式下不启动位置更新
+        if isAppIntentMode {
+            print("📱 App Intent mode: Location request not processed")
+            return (nil, DetailedLocationInfo())
+        }
+        
         // 使用回退机制获取位置
         guard let location = await getLocationWithFallback() else {
             print("❌ Failed to get location with fallback")
@@ -309,6 +342,32 @@ class LocationManager: NSObject, ObservableObject {
         // 等待位置更新
         return await getCurrentLocation()
     }
+    
+    // MARK: - App Intent Mode Control
+    
+    func setAppIntentMode(_ enabled: Bool) {
+        isAppIntentMode = enabled
+        if enabled {
+            print("📱 App Intent mode enabled: Location services will not auto-start")
+            // 如果位置更新正在运行，停止它们
+            if isLocationUpdateActive {
+                stopLocationUpdates()
+            }
+        } else {
+            print("📱 App Intent mode disabled: Location services can auto-start")
+        }
+    }
+    
+    private var isAppIntentMode: Bool {
+        get {
+            return UserDefaults.standard.bool(forKey: "isAppIntentMode")
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "isAppIntentMode")
+        }
+    }
+    
+    // MARK: - Location Permission Management
 }
 
 // 宏观地点信息数据结构

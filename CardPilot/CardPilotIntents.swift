@@ -26,6 +26,11 @@ struct CollectDataIntent: AppIntent {
         print("🌐 WiFi from Shortcuts: \(wifi)")
         print("🏷️ NFC from Shortcuts: \(nfc)")
         print("📍 Location from Shortcuts: \(location)")
+        print("📱 App Intent mode: Using parameters from Shortcuts, not triggering location services")
+        
+        // Set App Intent mode flag to prevent automatic location updates
+        UserDefaults.standard.set(true, forKey: "isAppIntentMode")
+        print("📱 App Intent mode flag set in UserDefaults")
         
         do {
             // Create a temporary model context for data storage
@@ -41,11 +46,19 @@ struct CollectDataIntent: AppIntent {
             modelContext.insert(sessionData)
             try modelContext.save()
             
+            // Clear App Intent mode flag after completion
+            UserDefaults.standard.set(false, forKey: "isAppIntentMode")
+            print("📱 App Intent mode flag cleared")
+            
             print("✅ Background data collection completed successfully")
             
             return .result(dialog: IntentDialog("Data collected: WiFi: \(wifi), NFC: \(nfc), Location: \(location)"))
             
         } catch {
+            // Clear App Intent mode flag on error
+            UserDefaults.standard.set(false, forKey: "isAppIntentMode")
+            print("📱 App Intent mode flag cleared due to error")
+            
             print("❌ Background data collection failed: \(error)")
             throw error
         }
