@@ -18,24 +18,8 @@ struct CollectDataIntent: AppIntent {
     @Parameter(title: "NFC Info", description: "NFC tag UID or information", default: "")
     var nfc: String
     
-    @Parameter(title: "Street", description: "Street address", default: "")
-    var street: String
-    
-    @Parameter(title: "City", description: "City name", default: "")
-    var city: String
-    
-    @Parameter(title: "State", description: "State or province", default: "")
-    var state: String
-    
-    @Parameter(title: "Country", description: "Country name", default: "")
-    var country: String
-    
-    @Parameter(title: "Postal Code", description: "Postal or ZIP code", default: "")
-    var postalCode: String
-    
     func perform() async throws -> some IntentResult & ProvidesDialog {
         print("🎯 Starting background data collection via App Intent")
-        print("📍 Address from Shortcuts: \(street), \(city), \(state), \(country) \(postalCode)")
         print("🌐 WiFi from Shortcuts: \(wifi)")
         print("🏷️ NFC from Shortcuts: \(nfc)")
         
@@ -55,7 +39,7 @@ struct CollectDataIntent: AppIntent {
             
             print("✅ Background data collection completed successfully")
             
-            return .result(dialog: IntentDialog("Data collected: WiFi: \(wifi), NFC: \(nfc), Address: \(city), \(state)"))
+            return .result(dialog: IntentDialog("Data collected: WiFi: \(wifi), NFC: \(nfc), Location: \(sessionData.latitude ?? 0), \(sessionData.longitude ?? 0)"))
             
         } catch {
             print("❌ Background data collection failed: \(error)")
@@ -69,20 +53,32 @@ struct CollectDataIntent: AppIntent {
         let sessionData = NFCSessionData()
         sessionData.timestamp = Date()
         
-        print("📊 Using address data from Shortcuts parameters...")
-        // Use address data directly from Shortcuts parameters
-        sessionData.street = street.isEmpty ? nil : street
-        sessionData.city = city.isEmpty ? nil : city
-        sessionData.state = state.isEmpty ? nil : state
-        sessionData.country = country.isEmpty ? nil : country
-        sessionData.postalCode = postalCode.isEmpty ? nil : postalCode
-        sessionData.administrativeArea = state.isEmpty ? nil : state
-        sessionData.subLocality = city.isEmpty ? nil : city
-        
         print("📍 Collecting GPS coordinates...")
         let locationData = try await collectLocationDataInBackground()
         sessionData.latitude = locationData.latitude
         sessionData.longitude = locationData.longitude
+        
+        // Parse address information from GPS coordinates
+        if let latitude = locationData.latitude, let longitude = locationData.longitude {
+            print("🏠 Parsing address from GPS coordinates...")
+            let addressInfo = try await parseAddressFromCoordinates(latitude: latitude, longitude: longitude)
+            sessionData.street = addressInfo.street
+            sessionData.city = addressInfo.city
+            sessionData.state = addressInfo.state
+            sessionData.country = addressInfo.country
+            sessionData.postalCode = addressInfo.postalCode
+            sessionData.administrativeArea = addressInfo.state
+            sessionData.subLocality = addressInfo.city
+        } else {
+            print("⚠️ No GPS coordinates available, address fields will be nil")
+            sessionData.street = nil
+            sessionData.city = nil
+            sessionData.state = nil
+            sessionData.country = nil
+            sessionData.postalCode = nil
+            sessionData.administrativeArea = nil
+            sessionData.subLocality = nil
+        }
         
         print("🌐 Using WiFi data from Shortcuts parameters...")
         let networkData = try await collectNetworkDataInBackground()
@@ -166,6 +162,40 @@ struct CollectDataIntent: AppIntent {
                     print("⚠️ Location timeout")
                     continuation.resume(returning: (nil, nil))
                 }
+            }
+        }
+    }
+    
+    // MARK: - Address Parsing from GPS
+    
+    private func parseAddressFromCoordinates(latitude: Double, longitude: Double) async throws -> (street: String?, city: String?, state: String?, country: String?, postalCode: String?) {
+        let location = CLLocation(latitude: latitude, longitude: longitude)
+        let geocoder = CLGeocoder()
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            geocoder.reverseGeocodeLocation(location) { placemarks, error in
+                if let error = error {
+                    print("⚠️ Geocoding error: \(error)")
+                    continuation.resume(throwing: error)
+                    return
+                }
+                
+                guard let placemark = placemarks?.first else {
+                    print("⚠️ No placemark found for coordinates")
+                    continuation.resume(throwing: NSError(domain: "Geocoding", code: 0, userInfo: [NSLocalizedDescriptionKey: "No placemark found"]))
+                    return
+                }
+                
+                let addressInfo = (
+                    street: placemark.thoroughfare,
+                    city: placemark.locality,
+                    state: placemark.administrativeArea,
+                    country: placemark.country,
+                    postalCode: placemark.postalCode
+                )
+                
+                print("✅ Address parsed: \(addressInfo.street ?? "Unknown"), \(addressInfo.city ?? "Unknown"), \(addressInfo.state ?? "Unknown"), \(addressInfo.country ?? "Unknown")")
+                continuation.resume(returning: addressInfo)
             }
         }
     }
