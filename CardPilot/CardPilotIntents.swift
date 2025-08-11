@@ -135,6 +135,7 @@ struct CollectDataIntent: AppIntent {
         sessionData.proximityData = sensorData.proximityData
         sessionData.pedometerData = sensorData.pedometerData
         sessionData.temperatureData = sensorData.temperatureData
+        sessionData.imuData = sensorData.imuData  // Store IMU data
         print("✅ Sensor data assigned to session")
         
         // Note: batteryData and systemResourceData are not stored in NFCSessionData model
@@ -151,6 +152,22 @@ struct CollectDataIntent: AppIntent {
         sessionData.screenState = "unknown"
         sessionData.screenBrightness = 0
         print("✅ Metadata set successfully")
+        
+        // Add NFC usage record if NFC info is not empty
+        if !nfc.isEmpty {
+            print("🔧 Step 2.6: Creating NFC usage record...")
+            let nfcUsageRecord = NFCUsageRecord(
+                timestamp: Date(),
+                triggerSource: "app_intent",
+                usageType: .unknown,
+                nfcUID: nfc
+            )
+            
+            modelContext.insert(nfcUsageRecord)
+            print("✅ NFC usage record created and inserted")
+        } else {
+            print("⚠️ No NFC info provided, skipping NFC usage record")
+        }
         
         print("✅ collectAllDataInBackground: Completed successfully")
         return sessionData
@@ -251,7 +268,7 @@ struct CollectDataIntent: AppIntent {
     
     // MARK: - Sensor Data Collection
     
-    private func collectSensorDataInBackground() async throws -> (magnetometerData: Data?, barometerData: Data?, ambientLightData: Data?, proximityData: Data?, pedometerData: Data?, temperatureData: Data?, deviceOrientationData: Data?, batteryData: Data?, systemResourceData: Data?) {
+    private func collectSensorDataInBackground() async throws -> (magnetometerData: Data?, barometerData: Data?, ambientLightData: Data?, proximityData: Data?, pedometerData: Data?, temperatureData: Data?, deviceOrientationData: Data?, batteryData: Data?, systemResourceData: Data?, imuData: Data?) {
         
         print("🔧 collectSensorDataInBackground: Starting sensor data collection...")
         
@@ -282,25 +299,19 @@ struct CollectDataIntent: AppIntent {
         let proximityData = collectProximityData()
         print("✅ Proximity data: \(proximityData != nil ? "Collected" : "Not available")")
         
-        print("🔧 Collecting pedometer data...")
-        let pedometerData = try? await collectPedometerData()
-        print("✅ Pedometer data: \(pedometerData != nil ? "Collected" : "Not available")")
+        print("🔧 Collecting 3-second IMU data...")
+        let imuData = try? await collectIMUDataFor3Seconds()
+        print("✅ IMU data: \(imuData != nil ? "Collected" : "Not available")")
         
         print("🔧 Collecting temperature data...")
         let temperatureData = collectTemperatureData()
         print("✅ Temperature data: \(temperatureData != nil ? "Collected" : "Not available")")
         
-        print("🔧 Collecting device orientation data...")
-        let deviceOrientationData = collectDeviceOrientationData()
-        print("✅ Device orientation data: \(deviceOrientationData != nil ? "Collected" : "Not available")")
-        
-        print("🔧 Collecting battery data...")
-        let batteryData = collectBatteryData()
-        print("✅ Battery data: \(batteryData != nil ? "Collected" : "Not available")")
-        
-        print("🔧 Collecting system resource data...")
-        let systemResourceData = collectSystemResourceData()
-        print("✅ System resource data: \(systemResourceData != nil ? "Collected" : "Not available")")
+        // Set unused sensor data to nil
+        let pedometerData: Data? = nil
+        let deviceOrientationData: Data? = nil
+        let batteryData: Data? = nil
+        let systemResourceData: Data? = nil
         
         print("✅ collectSensorDataInBackground: All sensor data collected successfully")
         
@@ -313,7 +324,8 @@ struct CollectDataIntent: AppIntent {
             temperatureData,
             deviceOrientationData,
             batteryData,
-            systemResourceData
+            systemResourceData,
+            imuData
         )
     }
     
@@ -455,70 +467,99 @@ struct CollectDataIntent: AppIntent {
         return try? JSONEncoder().encode(proximityData)
     }
     
-    private func collectPedometerData() async throws -> Data? {
-        print("🔧 collectPedometerData: Starting...")
+    private func collectIMUDataFor3Seconds() async throws -> Data? {
+        print("🔧 collectIMUDataFor3Seconds: Starting...")
         
-        guard CMPedometer.isStepCountingAvailable() else {
-            print("⚠️ Pedometer step counting not available")
+        let motionManager = CMMotionManager()
+        guard motionManager.isDeviceMotionAvailable else {
+            print("⚠️ Device motion not available")
             return nil
         }
         
-        guard CMPedometer.isDistanceAvailable() else {
-            print("⚠️ Pedometer distance not available")
-            return nil
-        }
-        
-        print("🔧 Pedometer is available, starting data collection...")
+        print("🔧 Device motion is available, starting data collection...")
         
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data?, Error>) in
-            let pedometer = CMPedometer()
+            motionManager.deviceMotionUpdateInterval = 0.1
             
-            // Set a timeout for pedometer data collection
+            var dataPoints: [IMUDataPoint] = []
+            let startTime = Date()
+            let collectionDuration: TimeInterval = 3.0 // 3 seconds
+            
+            // Set a timeout for IMU data collection
             let timeoutTask = Task {
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 second timeout
-                print("⚠️ Pedometer data collection timed out after 5 seconds")
-                continuation.resume(returning: nil)
+                try? await Task.sleep(nanoseconds: UInt64(collectionDuration * 1_000_000_000))
+                print("⚠️ IMU data collection completed after \(collectionDuration) seconds")
+                motionManager.stopDeviceMotionUpdates()
+                
+                if !dataPoints.isEmpty {
+                    let imuSession = IMUSession(
+                        dataPoints: dataPoints,
+                        startTime: startTime,
+                        endTime: Date()
+                    )
+                    
+                    do {
+                        let encodedData = try JSONEncoder().encode(imuSession)
+                        print("✅ IMU data encoded successfully with \(dataPoints.count) data points")
+                        continuation.resume(returning: encodedData)
+                    } catch {
+                        print("❌ IMU data encoding error: \(error)")
+                        continuation.resume(returning: nil)
+                    }
+                } else {
+                    print("⚠️ No IMU data points collected")
+                    continuation.resume(returning: nil)
+                }
             }
             
-            pedometer.startUpdates(from: Date().addingTimeInterval(-3600)) { data, error in
-                timeoutTask.cancel() // Cancel timeout task
-                
+            motionManager.startDeviceMotionUpdates(to: .main) { data, error in
                 if let error = error {
-                    print("❌ Pedometer error: \(error)")
+                    print("❌ IMU error: \(error)")
+                    timeoutTask.cancel()
+                    motionManager.stopDeviceMotionUpdates()
                     continuation.resume(returning: nil)
                     return
                 }
                 
                 guard let data = data else {
-                    print("⚠️ No pedometer data received")
-                    continuation.resume(returning: nil)
+                    print("⚠️ No IMU data received")
                     return
                 }
                 
-                print("✅ Pedometer data received: \(data.numberOfSteps) steps")
-                
-                let startDate = data.startDate ?? Date()
-                let endDate = data.endDate ?? Date()
-                
-                let pedometerData = PedometerData(
-                    timestamp: startDate.timeIntervalSince1970,
-                    stepCount: data.numberOfSteps.intValue,
-                    distance: data.distance?.doubleValue ?? 0.0,
-                    averagePace: data.averageActivePace?.doubleValue ?? 0.0,
-                    startTime: startDate,
-                    endTime: endDate
+                let dataPoint = IMUDataPoint(
+                    timestamp: data.timestamp,
+                    accelerationX: data.userAcceleration.x,
+                    accelerationY: data.userAcceleration.y,
+                    accelerationZ: data.userAcceleration.z,
+                    rotationRateX: data.rotationRate.x,
+                    rotationRateY: data.rotationRate.y,
+                    rotationRateZ: data.rotationRate.z
                 )
                 
-                do {
-                    let encodedData = try JSONEncoder().encode(pedometerData)
-                    print("✅ Pedometer data encoded successfully")
-                    continuation.resume(returning: encodedData)
-                } catch {
-                    print("❌ Pedometer data encoding error: \(error)")
-                    continuation.resume(returning: nil)
-                }
+                dataPoints.append(dataPoint)
+                print("✅ IMU data point collected: \(dataPoints.count)")
                 
-                pedometer.stopUpdates()
+                // Check if we've collected enough data
+                let elapsedTime = Date().timeIntervalSince(startTime)
+                if elapsedTime >= collectionDuration {
+                    timeoutTask.cancel()
+                    motionManager.stopDeviceMotionUpdates()
+                    
+                    let imuSession = IMUSession(
+                        dataPoints: dataPoints,
+                        startTime: startTime,
+                        endTime: Date()
+                    )
+                    
+                    do {
+                        let encodedData = try JSONEncoder().encode(imuSession)
+                        print("✅ IMU data collection completed with \(dataPoints.count) data points")
+                        continuation.resume(returning: encodedData)
+                    } catch {
+                        print("❌ IMU data encoding error: \(error)")
+                        continuation.resume(returning: nil)
+                    }
+                }
             }
         }
     }
@@ -545,53 +586,6 @@ struct CollectDataIntent: AppIntent {
         return try? JSONEncoder().encode(temperatureData)
     }
     
-    private func collectDeviceOrientationData() -> Data? {
-        let orientation = UIDevice.current.orientation
-        let deviceOrientationData = DeviceOrientationData(
-            timestamp: Date().timeIntervalSince1970,
-            orientation: orientation.rawValue,
-            orientationName: getOrientationName(orientation),
-            isPortrait: orientation.isPortrait,
-            isLandscape: orientation.isLandscape,
-            isFlat: orientation.isFlat
-        )
-        
-        return try? JSONEncoder().encode(deviceOrientationData)
-    }
-    
-    private func collectBatteryData() -> Data? {
-        let device = UIDevice.current
-        device.isBatteryMonitoringEnabled = true
-        
-        let batteryData = BatteryData(
-            timestamp: Date().timeIntervalSince1970,
-            batteryLevel: device.batteryLevel,
-            batteryState: device.batteryState.rawValue,
-            batteryStateName: getBatteryStateName(device.batteryState),
-            isCharging: device.batteryState == UIDevice.BatteryState.charging || device.batteryState == UIDevice.BatteryState.full,
-            isLowPower: device.batteryLevel < 0.2
-        )
-        
-        return try? JSONEncoder().encode(batteryData)
-    }
-    
-    private func collectSystemResourceData() -> Data? {
-        let processInfo = ProcessInfo.processInfo
-        
-        let systemResourceData = SystemResourceData(
-            timestamp: Date().timeIntervalSince1970,
-            cpuUsage: getCPUUsage(),
-            memoryUsage: getMemoryUsage(),
-            thermalState: processInfo.thermalState.rawValue,
-            thermalStateName: getThermalStateName(processInfo.thermalState),
-            activeProcessorCount: processInfo.activeProcessorCount,
-            processorCount: processInfo.processorCount,
-            systemUptime: processInfo.systemUptime
-        )
-        
-        return try? JSONEncoder().encode(systemResourceData)
-    }
-    
     // MARK: - Device Data Collection
     
     private func collectDeviceDataInBackground() async throws -> Void {
@@ -599,63 +593,8 @@ struct CollectDataIntent: AppIntent {
         return
     }
     
-    // MARK: - Helper Functions
-    
-    private func getOrientationName(_ orientation: UIDeviceOrientation) -> String {
-        switch orientation {
-        case .portrait: return "Portrait"
-        case .portraitUpsideDown: return "Portrait Upside Down"
-        case .landscapeLeft: return "Landscape Left"
-        case .landscapeRight: return "Landscape Right"
-        case .faceUp: return "Face Up"
-        case .faceDown: return "Face Down"
-        case .unknown: return "Unknown"
-        @unknown default: return "Unknown"
-        }
-    }
-    
-    private func getBatteryStateName(_ state: UIDevice.BatteryState) -> String {
-        switch state {
-        case .unknown: return "Unknown"
-        case .unplugged: return "Unplugged"
-        case .charging: return "Charging"
-        case .full: return "Full"
-        @unknown default: return "Unknown"
-        }
-    }
-    
-    private func getThermalStateName(_ state: ProcessInfo.ThermalState) -> String {
-        switch state {
-        case .nominal: return "Nominal"
-        case .fair: return "Fair"
-        case .serious: return "Serious"
-        case .critical: return "Critical"
-        @unknown default: return "Unknown"
-        }
-    }
-    
-    private func getCPUUsage() -> Double {
-        #if targetEnvironment(simulator)
-        return 30.0
-        #else
-        let processInfo = ProcessInfo.processInfo
-        let activeProcessorCount = processInfo.activeProcessorCount
-        let processorCount = processInfo.processorCount
-        let loadFactor = Double(activeProcessorCount) / Double(processorCount)
-        let cpuUsage = loadFactor * 50.0 + Double.random(in: 10...30)
-        return min(cpuUsage, 100.0)
-        #endif
-    }
-    
-    private func getMemoryUsage() -> Double {
-        let processInfo = ProcessInfo.processInfo
-        let physicalMemory = processInfo.physicalMemory
-        let memoryUsage = Double(processInfo.physicalMemory - processInfo.physicalMemory) / Double(physicalMemory)
-        return min(max(memoryUsage, 0.0), 1.0) * 100.0
-    }
+    // MARK: - App Shortcuts Provider
 }
-
-// MARK: - App Shortcuts Provider
 
 struct CardPilotAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
