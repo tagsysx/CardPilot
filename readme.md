@@ -8,7 +8,7 @@ CardPilot is an iOS app designed to automatically collect and record device data
 ## Features
 
 - **GPS Location Tracking**: Records precise latitude and longitude coordinates with detailed address information
-- **Network Information**: Captures device IP address (local and public)
+- **Network Information**: Captures device IP address (local and public) and WiFi network details (SSID)
 - **Motion Sensor Data**: Collects 5 seconds of accelerometer, gyroscope, and magnetometer data
 - **Audio Recording**: Captures ambient audio data during NFC sessions
 - **App Context Detection**: Identifies the triggering application or context
@@ -35,7 +35,7 @@ CardPilot is an iOS app designed to automatically collect and record device data
 1. **NFC Trigger**: When an NFC tag is scanned, iOS Shortcuts can automatically launch CardPilot
 2. **Data Collection**: The app simultaneously collects:
    - Current GPS coordinates with detailed address information
-   - Device IP address
+   - Device IP address and WiFi network details (SSID)
    - 5 seconds of IMU sensor data (accelerometer + gyroscope + magnetometer)
    - Ambient audio data
    - Information about the triggering app/context
@@ -46,14 +46,24 @@ CardPilot is an iOS app designed to automatically collect and record device data
 
 ### 1. iOS Shortcuts Configuration
 
-To set up CardPilot with iOS Shortcuts for NFC triggering:
+To set up CardPilot with iOS Shortcuts for NFC triggering using URL Scheme:
 
 1. Open the **Shortcuts** app on your iOS device
 2. Create a new shortcut
 3. Add the "NFC" trigger
-4. Add the "Open App" action and select CardPilot
-5. Optionally, add "Get Text from Input" to pass context information
-6. Save the shortcut
+4. Add "Get Current WiFi Network" action to capture WiFi details
+5. Add "Get Details of WiFi Network" action and select "SSID"
+6. Add "Open URLs" action (not "Open App")
+7. Set the URL to: `cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=[WiFi Variable]`
+8. Replace `[WiFi Variable]` with the SSID variable from step 5
+9. Save the shortcut
+
+**Alternative: Simple NFC-only setup**
+If you only need NFC triggering without WiFi details:
+1. Add "NFC" trigger
+2. Add "Open URLs" action
+3. Set URL to: `cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true`
+4. Save the shortcut
 
 ### 2. URL Scheme Integration
 
@@ -146,6 +156,7 @@ Each NFC session records:
 - GPS Location: Latitude and longitude coordinates
 - Address Information: Street, city, state, country, postal code
 - IP Address: Device's current IP address
+- WiFi Network: Current WiFi network name (SSID) when available
 - Current App: Name of the triggering application
 - IMU Data: 5 seconds of motion sensor readings (accelerometer, gyroscope, magnetometer)
 - Audio Data: Ambient audio recordings during the session
@@ -174,18 +185,28 @@ Each NFC session records:
 ## Usage Examples
 
 ### Basic NFC Trigger
-1. Set up iOS Shortcut with NFC trigger
-2. Tap NFC tag with device
-3. CardPilot automatically launches and collects data
-4. View collected data in the app interface
+1. Set up iOS Shortcut with NFC trigger and URL Scheme
+2. Configure WiFi details capture (optional but recommended)
+3. Tap NFC tag with device
+4. CardPilot automatically launches via URL Scheme and collects data
+5. View collected data in the app interface
 
 ### URL Scheme Trigger
 
 #### Using in iOS Shortcuts
 In the Shortcuts app, add an "Open URL" action:
+
+**With WiFi details (recommended):**
+```
+cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&ssid=[WiFi_SSID]&nfc=[NFC_UID]
+```
+
+**Without WiFi details:**
 ```
 cardpilot://collect?sourceApp=Shortcuts&autoExit=true&silent=true&nfc=[NFC_UID]
 ```
+
+**Note:** Replace `[WiFi_SSID]` with the actual WiFi network name variable from your Shortcuts workflow.
 
 #### Programmatic Calls in Other Apps
 ```swift
