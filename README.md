@@ -1,8 +1,7 @@
 # CardPilot - NFC Data Collection App
 
-**Current Version**: 1.1  
-**Last Updated**: August 11, 2025
-
+**Current Version**: 1.3
+**Last Updated**: January 2025
 CardPilot is an iOS app designed to automatically collect and record device data when triggered by NFC interactions through iOS Shortcuts. The app captures GPS location, IP address, IMU sensor data, and information about the triggering context.
 
 ## Features
