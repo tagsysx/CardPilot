@@ -299,8 +299,8 @@ struct CollectDataIntent: AppIntent {
         let proximityData = collectProximityData()
         print("✅ Proximity data: \(proximityData != nil ? "Collected" : "Not available")")
         
-        print("🔧 Collecting 3-second IMU data...")
-        let imuData = try? await collectIMUDataFor3Seconds()
+        print("🔧 Collecting IMU data...")
+        let imuData = try? await collectIMUData()
         print("✅ IMU data: \(imuData != nil ? "Collected" : "Not available")")
         
         print("🔧 Collecting temperature data...")
@@ -467,8 +467,14 @@ struct CollectDataIntent: AppIntent {
         return try? JSONEncoder().encode(proximityData)
     }
     
-    private func collectIMUDataFor3Seconds() async throws -> Data? {
-        print("🔧 collectIMUDataFor3Seconds: Starting...")
+    private func collectIMUData() async throws -> Data? {
+        print("🔧 collectIMUData: Starting...")
+        
+        // Read IMU collection duration from user settings
+        let collectionDuration: TimeInterval = UserDefaults.standard.double(forKey: "imuCollectionDuration") > 0 ?
+            UserDefaults.standard.double(forKey: "imuCollectionDuration") : 5.0
+        
+        print("🔧 IMU collection duration from settings: \(collectionDuration) seconds")
         
         let motionManager = CMMotionManager()
         guard motionManager.isDeviceMotionAvailable else {
@@ -483,9 +489,8 @@ struct CollectDataIntent: AppIntent {
             
             var dataPoints: [IMUDataPoint] = []
             let startTime = Date()
-            let collectionDuration: TimeInterval = 3.0 // 3 seconds
             
-            // Set a timeout for IMU data collection
+            // Set a timeout for IMU data collection based on user settings
             let timeoutTask = Task {
                 try? await Task.sleep(nanoseconds: UInt64(collectionDuration * 1_000_000_000))
                 print("⚠️ IMU data collection completed after \(collectionDuration) seconds")
@@ -539,7 +544,7 @@ struct CollectDataIntent: AppIntent {
                 dataPoints.append(dataPoint)
                 print("✅ IMU data point collected: \(dataPoints.count)")
                 
-                // Check if we've collected enough data
+                // Check if we've collected enough data based on user settings
                 let elapsedTime = Date().timeIntervalSince(startTime)
                 if elapsedTime >= collectionDuration {
                     timeoutTask.cancel()
