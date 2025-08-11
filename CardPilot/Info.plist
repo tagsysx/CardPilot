@@ -63,5 +63,10 @@
 	<!-- WiFi信息访问权限 (iOS 14+) -->
 	<key>com.apple.developer.networking.wifi-info</key>
 	<true/>
+	
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.yourcompany.CardPilot.CollectDataIntent</string>
+	</array>
 </dict>
 </plist>

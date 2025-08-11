@@ -23,7 +23,7 @@ class NFCDataCollectionService: ObservableObject {
     @Published var lastError: String?
     @Published var collectionProgress: String = ""
     
-    func collectAllData(modelContext: ModelContext, urlParameters: [String: Any]? = nil) async -> NFCSessionData {
+    func collectAllData(modelContext: ModelContext, urlParameters: [String: Any]? = nil, skipMicrophone: Bool = false) async -> NFCSessionData {
         isCollecting = true
         lastError = nil
         collectionProgress = "Starting data collection..."
@@ -38,7 +38,7 @@ class NFCDataCollectionService: ObservableObject {
             async let ipAddressTask = networkManager.getCurrentIPAddress()
             async let currentAppTask = getCurrentApp(parameters: urlParameters)
             async let imuDataTask = motionManager.collectIMUData()
-            async let sensorDataTask = collectSensorData()
+            async let sensorDataTask = collectSensorData(skipMicrophone: skipMicrophone)
             
             // Wait for all tasks to complete
             let (locationData, ipAddress, currentApp, imuData, sensorData) = await (locationTask, ipAddressTask, currentAppTask, imuDataTask, sensorDataTask)
@@ -155,7 +155,16 @@ class NFCDataCollectionService: ObservableObject {
     // Method to handle URL scheme launches
     func handleURLScheme(_ url: URL, modelContext: ModelContext) async -> NFCSessionData {
         // Extract parameters from URL
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         var parameters: [String: Any] = [:]
+        
+        if let queryItems = components?.queryItems {
+            for item in queryItems {
+                parameters[item.name] = item.value
+            }
+        }
+        
+        let skipMicrophone = (parameters["skipMicrophone"] as? String)?.lowercased() == "true"
         
         if let appName = currentAppDetector.handleURLScheme(url) {
             parameters["triggeringApp"] = appName
@@ -169,7 +178,7 @@ class NFCDataCollectionService: ObservableObject {
             modelContext: modelContext
         )
         
-        return await collectAllData(modelContext: modelContext, urlParameters: parameters)
+        return await collectAllData(modelContext: modelContext, urlParameters: parameters, skipMicrophone: skipMicrophone)
     }
     
     // Method to be called from Shortcuts app
@@ -269,7 +278,7 @@ class NFCDataCollectionService: ObservableObject {
     }
     
     // MARK: - 传感器数据收集
-    private func collectSensorData() async -> SensorDataCollection {
+    private func collectSensorData(skipMicrophone: Bool) async -> SensorDataCollection {
         collectionProgress = "Collecting sensor data..."
         
         do {
@@ -277,7 +286,7 @@ class NFCDataCollectionService: ObservableObject {
             let locationData = await locationManager.getCurrentLocationWithDetails()
             
             // 收集所有传感器数据
-            await sensorManager.collectAllSensorData(for: locationData.location)
+            await sensorManager.collectAllSensorData(for: locationData.location, skipMicrophone: skipMicrophone)
             
             // 等待音频录制完成（3秒）
             try await Task.sleep(nanoseconds: 3_000_000_000)

@@ -427,7 +427,7 @@ class SensorManager: ObservableObject {
     }
     
     // MARK: - 批量数据收集
-    func collectAllSensorData(for location: CLLocation? = nil) async {
+    func collectAllSensorData(for location: CLLocation? = nil, skipMicrophone: Bool = false) async {
         // 收集所有可用的传感器数据
         getAmbientLightData()
         getProximityData()
@@ -438,8 +438,9 @@ class SensorManager: ObservableObject {
         getNetworkData()
         getSystemResourceData()
         
-        // 开始录制音频
-        startMicrophoneRecording()
+        if !skipMicrophone {
+            startMicrophoneRecording()
+        }
     }
     
     // MARK: - 停止所有传感器更新
